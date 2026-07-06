@@ -1,0 +1,11 @@
+{
+  "name": "team-chat-vendor",
+  "private": true,
+  "description": "static/js/vendor/socket.io.min.js 재생성 전용. 런타임(서버 실행)에는 사용되지 않음.",
+  "scripts": {
+    "vendor:socketio": "npm install socket.io-client@4.8.3 --no-save && cp node_modules/socket.io-client/dist/socket.io.min.js* static/js/vendor/ && rm -rf node_modules package-lock.json"
+  },
+  "dependencies": {
+    "socket.io-client": "4.8.3"
+  }
+}

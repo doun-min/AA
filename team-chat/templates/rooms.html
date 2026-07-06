@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}채팅방 목록{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="topbar-user">
+    <strong>{{ nickname }}</strong>
+    {% if is_superadmin %}<span class="badge badge-admin">슈퍼관리자</span>{% endif %}
+  </div>
+  <form method="post" action="{{ url_for('pages.logout') }}"><button class="btn-ghost" type="submit">나가기</button></form>
+</div>
+
+<div class="layout">
+  <section class="panel">
+    <div class="panel-header"><h2>채팅방</h2></div>
+    <form id="create-room-form" class="inline-form">
+      <input type="text" id="new-room-name" placeholder="새 방 이름" maxlength="50" required>
+      <button type="submit">방 만들기</button>
+    </form>
+    <p id="room-error" class="error"></p>
+    <ul class="room-list">
+      {% for room in group_rooms %}
+      <li class="room-item">
+        <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
+          <span class="room-name">{{ room.name }}</span>
+          {% if room.type == 'global' %}<span class="badge">전체</span>{% endif %}
+          {% if room.owner_nickname %}<span class="room-owner">방장: {{ room.owner_nickname }}</span>{% endif %}
+        </a>
+        {% if room.is_deletable and (room.owner_nickname == nickname or is_superadmin) %}
+        <button class="btn-danger btn-delete-room" data-room-id="{{ room.id }}">삭제</button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><h2>1:1 대화</h2></div>
+    <ul class="room-list">
+      {% for room in direct_rooms %}
+      <li class="room-item">
+        <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
+          <span class="room-name">{{ room.other }}</span>
+        </a>
+      </li>
+      {% endfor %}
+      {% if not direct_rooms %}<li class="empty">진행 중인 1:1 대화가 없습니다.</li>{% endif %}
+    </ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><h2>접속 중인 사용자</h2></div>
+    <ul class="room-list">
+      {% for user in active_users %}
+      <li class="room-item">
+        <span class="room-name">{{ user }}</span>
+        <button class="btn-secondary btn-dm" data-target="{{ user }}">1:1 대화</button>
+      </li>
+      {% endfor %}
+      {% if not active_users %}<li class="empty">다른 접속자가 없습니다.</li>{% endif %}
+    </ul>
+  </section>
+</div>
+
+<script src="{{ url_for('static', filename='js/rooms.js') }}"></script>
+{% endblock %}

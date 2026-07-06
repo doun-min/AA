@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+chat.db
+static/uploads/*
+!static/uploads/.gitkeep
+node_modules/
+package-lock.json
+.venv/
+venv/

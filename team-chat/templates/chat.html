@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}{{ room.name }} - 채팅{% endblock %}
+{% block body %}
+<div class="chat-page"
+     data-room-id="{{ room.id }}"
+     data-nickname="{{ nickname }}"
+     data-room-type="{{ room.type }}">
+  <div class="chat-header">
+    <a class="back-link" href="{{ url_for('pages.rooms_page') }}">&larr; 목록</a>
+    <h1>{{ room.name }}</h1>
+    <div class="chat-actions">
+      {% if can_manage and room.type != 'direct' %}
+      <button id="btn-transfer" class="btn-secondary">방장 위임</button>
+      {% endif %}
+      {% if room_deletable and can_manage %}
+      <button id="btn-delete" class="btn-danger">방 삭제</button>
+      {% endif %}
+      <a class="btn-secondary" href="{{ url_for('logs.download_log', room_id=room.id) }}">로그 다운로드</a>
+    </div>
+  </div>
+
+  <div id="messages" class="messages">
+    {% for m in messages %}
+      <div class="message {{ 'me' if m.sender == nickname else '' }} type-{{ m.type }}" data-msg-id="{{ m.id }}">
+        {% if m.type == 'system' %}
+          <div class="system-text">{{ m.content }}</div>
+        {% else %}
+          <div class="msg-meta"><span class="msg-sender">{{ m.sender }}</span><span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span></div>
+          {% if m.type == 'text' %}
+            <div class="msg-body">{{ m.content }}</div>
+          {% elif m.type == 'image' %}
+            <div class="msg-body"><img class="msg-image" src="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" alt="{{ m.original_filename }}"></div>
+          {% else %}
+            <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" target="_blank">📎 {{ m.original_filename }}</a></div>
+          {% endif %}
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <form id="message-form" class="message-form">
+    <input type="file" id="file-input" hidden>
+    <button type="button" id="btn-attach" class="btn-secondary">📎</button>
+    <input type="text" id="message-input" placeholder="메시지를 입력하세요 (@닉네임 으로 멘션)" autocomplete="off">
+    <button type="submit">전송</button>
+  </form>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<script src="{{ url_for('static', filename='js/vendor/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}
