@@ -46,9 +46,9 @@
       if (msg.type === "text") {
         body = `<div class="msg-body">${linkifyMentions(msg.content)}</div>`;
       } else if (msg.type === "image") {
-        body = `<div class="msg-body"><img class="msg-image" src="/files/${roomId}/${msg.file_path}" alt=""></div>`;
+        body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}"><img class="msg-image" src="/files/${roomId}/${msg.file_path}" alt=""></a></div>`;
       } else {
-        body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" target="_blank">📎 ${escapeHtml(msg.original_filename)}</a></div>`;
+        body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}">📎 ${escapeHtml(msg.original_filename)}</a></div>`;
       }
       div.innerHTML =
         `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span><span class="msg-time">${time}</span></div>` +

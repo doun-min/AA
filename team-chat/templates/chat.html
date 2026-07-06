@@ -29,9 +29,9 @@
           {% if m.type == 'text' %}
             <div class="msg-body">{{ m.content }}</div>
           {% elif m.type == 'image' %}
-            <div class="msg-body"><img class="msg-image" src="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" alt="{{ m.original_filename }}"></div>
+            <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" download="{{ m.original_filename }}"><img class="msg-image" src="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" alt="{{ m.original_filename }}"></a></div>
           {% else %}
-            <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" target="_blank">📎 {{ m.original_filename }}</a></div>
+            <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" download="{{ m.original_filename }}">📎 {{ m.original_filename }}</a></div>
           {% endif %}
         {% endif %}
       </div>
