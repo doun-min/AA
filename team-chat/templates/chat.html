@@ -4,7 +4,8 @@
 <div class="chat-page"
      data-room-id="{{ room.id }}"
      data-nickname="{{ nickname }}"
-     data-room-type="{{ room.type }}">
+     data-room-type="{{ room.type }}"
+     data-last-message-id="{{ messages[-1].id if messages else 0 }}">
   <div class="chat-header">
     <a class="back-link" href="{{ url_for('pages.rooms_page') }}">&larr; 목록</a>
     <h1>{{ room.name }}</h1>
@@ -19,13 +20,19 @@
     </div>
   </div>
 
+  <div id="schedule-banner" class="schedule-banner">{{ schedule_banner }}</div>
+
   <div id="messages" class="messages">
     {% for m in messages %}
       <div class="message {{ 'me' if m.sender == nickname else '' }} type-{{ m.type }}" data-msg-id="{{ m.id }}">
         {% if m.type == 'system' %}
           <div class="system-text">{{ m.content }}</div>
         {% else %}
-          <div class="msg-meta"><span class="msg-sender">{{ m.sender }}</span><span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span></div>
+          <div class="msg-meta">
+            <span class="msg-sender">{{ m.sender }}</span>
+            {% if m.unread_count %}<span class="msg-unread" data-msg-id="{{ m.id }}">{{ m.unread_count }}</span>{% else %}<span class="msg-unread" data-msg-id="{{ m.id }}" hidden></span>{% endif %}
+            <span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span>
+          </div>
           {% if m.type == 'text' %}
             <div class="msg-body">{{ m.content }}</div>
           {% elif m.type == 'image' %}
@@ -48,6 +55,5 @@
 
 <div id="toast-container" class="toast-container"></div>
 
-<script src="{{ url_for('static', filename='js/vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

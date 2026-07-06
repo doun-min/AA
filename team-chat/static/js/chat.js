@@ -11,16 +11,28 @@
   const deleteBtn = document.getElementById("btn-delete");
   const transferBtn = document.getElementById("btn-transfer");
 
-  const socket = io();
+  const socket = (window.ChatNotify && window.ChatNotify.getSocket()) || io();
+
+  let latestMessageId = Number(page.dataset.lastMessageId) || 0;
 
   function scrollToBottom() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
   scrollToBottom();
 
+  function markReadIfVisible() {
+    if (document.visibilityState === "visible" && latestMessageId) {
+      socket.emit("mark_read", { room_id: Number(roomId), up_to_message_id: latestMessageId });
+    }
+  }
+
   socket.on("connect", () => {
     socket.emit("join", { room_id: Number(roomId) });
+    markReadIfVisible();
   });
+
+  document.addEventListener("visibilitychange", markReadIfVisible);
+  markReadIfVisible();
 
   function escapeHtml(str) {
     const div = document.createElement("div");
@@ -50,17 +62,59 @@
       } else {
         body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}">📎 ${escapeHtml(msg.original_filename)}</a></div>`;
       }
+      const unreadCount = msg.unread_count || 0;
+      const unreadAttr = unreadCount ? "" : " hidden";
       div.innerHTML =
-        `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span><span class="msg-time">${time}</span></div>` +
+        `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span>` +
+        `<span class="msg-unread" data-msg-id="${msg.id}"${unreadAttr}>${unreadCount}</span>` +
+        `<span class="msg-time">${time}</span></div>` +
         body;
     }
     messagesEl.appendChild(div);
     scrollToBottom();
   }
 
+  function updateUnreadBadge(msgId, count) {
+    const badge = messagesEl.querySelector(`.msg-unread[data-msg-id="${msgId}"]`);
+    if (!badge) return;
+    if (count > 0) {
+      badge.hidden = false;
+      badge.textContent = count;
+    } else {
+      badge.hidden = true;
+      badge.textContent = "";
+    }
+  }
+
   socket.on("new_message", (msg) => {
     if (Number(msg.room_id) !== Number(roomId)) return;
     appendMessage(msg);
+    latestMessageId = Math.max(latestMessageId, Number(msg.id));
+    markReadIfVisible();
+  });
+
+  socket.on("read_update", (data) => {
+    if (Number(data.room_id) !== Number(roomId)) return;
+    (data.updates || []).forEach((u) => updateUnreadBadge(u.id, u.unread_count));
+  });
+
+  const scheduleBanner = document.getElementById("schedule-banner");
+  function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  async function refreshScheduleBanner() {
+    if (!scheduleBanner) return;
+    try {
+      const res = await fetch("/api/schedules/today");
+      const data = await res.json();
+      if (res.ok) scheduleBanner.textContent = data.banner;
+    } catch (err) {
+      /* ignore */
+    }
+  }
+  socket.on("schedule_updated", (data) => {
+    if (data.date === todayStr()) refreshScheduleBanner();
   });
 
   socket.on("mention", (data) => {

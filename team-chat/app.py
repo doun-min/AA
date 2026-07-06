@@ -19,11 +19,15 @@ def create_app():
     from routes.rooms import rooms_bp
     from routes.files import files_bp
     from routes.logs import logs_bp
+    from routes.schedules import schedules_bp
+    from routes.excel import excel_bp
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(rooms_bp)
     app.register_blueprint(files_bp)
     app.register_blueprint(logs_bp)
+    app.register_blueprint(schedules_bp)
+    app.register_blueprint(excel_bp)
 
     socketio.init_app(app, async_mode="threading")
 

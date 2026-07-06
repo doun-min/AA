@@ -1,8 +1,11 @@
+from datetime import date
+
 from flask import Blueprint, abort, redirect, render_template, request, session, url_for
 
 import auth
 import config
 import db
+from routes.schedules import format_banner
 
 pages_bp = Blueprint("pages", __name__)
 
@@ -74,10 +77,14 @@ def chat_page(room_id):
     if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
         abort(403)
 
-    messages = db.list_messages(room_id)
+    db.ensure_room_participant(room_id, nickname)
+    messages = db.list_messages_with_unread(room_id)
     is_owner = room.get("owner_nickname") == nickname
     is_superadmin = auth.is_superadmin(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
+
+    today_schedules = db.list_schedules_for_date(date.today().isoformat())
+    schedule_banner = format_banner(today_schedules)
 
     return render_template(
         "chat.html",
@@ -89,4 +96,5 @@ def chat_page(room_id):
         can_manage=is_owner or is_superadmin,
         room_deletable=bool(room["is_deletable"]),
         active_users=active_users,
+        schedule_banner=schedule_banner,
     )

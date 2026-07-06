@@ -55,6 +55,7 @@ def upload_file(room_id):
         file_path=stored_filename,
         original_filename=upload.filename,
     )
+    unread_count = db.get_messages_unread_counts(room_id, [msg["id"]]).get(msg["id"], 0)
     payload = {
         "id": msg["id"],
         "room_id": room_id,
@@ -63,6 +64,7 @@ def upload_file(room_id):
         "file_path": stored_filename,
         "original_filename": upload.filename,
         "created_at": msg["created_at"],
+        "unread_count": unread_count,
     }
     socketio.emit("new_message", payload, room=str(room_id))
     return jsonify(message=payload), 201

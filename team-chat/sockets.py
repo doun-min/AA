@@ -85,6 +85,7 @@ def handle_join(data):
         return
     join_room(str(room_id))
     room_members.setdefault(room_id, set()).add(nickname)
+    db.ensure_room_participant(room_id, nickname)
 
 
 @socketio.on("leave")
@@ -113,6 +114,7 @@ def handle_send_message(data):
         return
 
     msg = db.add_message(room_id, nickname, "text", content=text)
+    unread_count = db.get_messages_unread_counts(room_id, [msg["id"]]).get(msg["id"], 0)
     payload = {
         "id": msg["id"],
         "room_id": room_id,
@@ -120,6 +122,7 @@ def handle_send_message(data):
         "type": "text",
         "content": text,
         "created_at": msg["created_at"],
+        "unread_count": unread_count,
     }
     emit("new_message", payload, room=str(room_id))
 
@@ -141,3 +144,32 @@ def handle_send_message(data):
                 },
                 room=sid,
             )
+
+
+@socketio.on("mark_read")
+def handle_mark_read(data):
+    nickname = session.get("nickname")
+    room_id = (data or {}).get("room_id")
+    up_to_message_id = (data or {}).get("up_to_message_id")
+    if not nickname or room_id is None or up_to_message_id is None:
+        return
+
+    room = db.get_room(room_id)
+    if not room:
+        return
+    if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
+        return
+
+    msg_ids = db.mark_messages_read(room_id, nickname, up_to_message_id)
+    if not msg_ids:
+        return
+
+    counts = db.get_messages_unread_counts(room_id, msg_ids)
+    emit(
+        "read_update",
+        {
+            "room_id": room_id,
+            "updates": [{"id": mid, "unread_count": c} for mid, c in counts.items()],
+        },
+        room=str(room_id),
+    )

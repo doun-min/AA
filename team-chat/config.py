@@ -21,6 +21,7 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 SUPERADMIN_NAMES = {"admin", "관리자"}
 
 GLOBAL_ROOM_NAME = "전체"
+SCHEDULE_ROOM_NAME = "일정공유"
 
 NICKNAME_MAX_LENGTH = 20
 ROOM_NAME_MAX_LENGTH = 50
