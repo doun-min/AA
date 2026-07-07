@@ -1,4 +1,7 @@
 (function () {
+  // notify.js가 "채팅 페이지면 인앱 토스트로 충분하다"고 판단할 수 있도록 표시.
+  window.__chatPageActive = true;
+
   const page = document.querySelector(".chat-page");
   const roomId = page.dataset.roomId;
   const nickname = page.dataset.nickname;

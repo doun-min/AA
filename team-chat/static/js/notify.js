@@ -56,9 +56,11 @@ window.ChatNotify = (function () {
     socket = io();
 
     socket.on("mention", (data) => {
-      // 실제로 화면을 보고 있지 않을 때만 OS 알림과 탭 타이틀 배지를 사용한다.
-      // 현재 보고 있는 중이면(챗 페이지의 인앱 토스트로 충분하므로) 여기서는 무시한다.
-      if (isBackgrounded()) {
+      // 채팅 페이지(chat.js)가 로드되어 있고 화면을 보고 있는 중이면 그쪽 인앱 토스트로
+      // 충분하므로 여기서는 무시한다. 방 목록/일정/엑셀 등 chat.js가 없는 페이지에서는
+      // 토스트가 뜰 곳이 없으므로, focus 여부와 무관하게 항상 OS 알림을 띄운다.
+      const handledByChatToast = window.__chatPageActive === true && !isBackgrounded();
+      if (!handledByChatToast) {
         bumpUnread();
         showNotification(data);
       }
