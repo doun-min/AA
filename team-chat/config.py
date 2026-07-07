@@ -28,3 +28,8 @@ ROOM_NAME_MAX_LENGTH = 50
 
 HOST = os.environ.get("CHAT_HOST", "0.0.0.0")
 PORT = int(os.environ.get("CHAT_PORT", "5000"))
+
+# 브라우저 알림(Notification API)은 secure context(https 또는 localhost)에서만 동작하므로
+# 사설 IP로 접속하는 내부망 환경에서는 자체서명 인증서로 https를 켜야 한다.
+CERT_FILE = os.path.join(BASE_DIR, "certs", "cert.pem")
+KEY_FILE = os.path.join(BASE_DIR, "certs", "key.pem")

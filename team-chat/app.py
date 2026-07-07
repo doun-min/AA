@@ -39,4 +39,12 @@ def create_app():
 app = create_app()
 
 if __name__ == "__main__":
-    socketio.run(app, host=config.HOST, port=config.PORT, debug=True, allow_unsafe_werkzeug=True)
+    ssl_context = (config.CERT_FILE, config.KEY_FILE) if os.path.exists(config.CERT_FILE) else None
+    socketio.run(
+        app,
+        host=config.HOST,
+        port=config.PORT,
+        debug=True,
+        allow_unsafe_werkzeug=True,
+        ssl_context=ssl_context,
+    )
