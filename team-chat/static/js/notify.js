@@ -20,6 +20,14 @@ window.ChatNotify = (function () {
     updateTitle();
   }
 
+  // document.hidden(visibilityState)은 "탭이 다른 탭에 가려졌는지"만 알려줄 뿐,
+  // 브라우저 창 자체가 다른 앱에 밀려 백그라운드에 있는 경우(탭은 여전히 visible)는
+  // 잡아내지 못한다. 그래서 창 포커스 여부(hasFocus)까지 함께 확인해야 실제로
+  // 사용자가 화면을 보고 있는지 판단할 수 있다.
+  function isBackgrounded() {
+    return document.hidden || !document.hasFocus();
+  }
+
   function showNotification(data) {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     const noti = new Notification(`${data.sender}님이 회원님을 멘션했습니다`, {
@@ -33,30 +41,40 @@ window.ChatNotify = (function () {
     };
   }
 
-  if (nickname) {
+  function requestPermissionIfNeeded() {
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
+  }
+
+  if (nickname) {
+    requestPermissionIfNeeded();
+    // Safari 등 일부 브라우저는 사용자 제스처 없이 호출된 requestPermission을 무시하므로
+    // 최초 클릭 시 한 번 더 시도한다.
+    document.addEventListener("click", requestPermissionIfNeeded, { once: true });
 
     socket = io();
 
     socket.on("mention", (data) => {
-      // 다른 탭을 보고 있거나 브라우저가 최소화된 상태(문서가 보이지 않는 상태)에서만
-      // OS 알림과 탭 타이틀 배지를 사용한다. 현재 보고 있는 중이면 페이지 내 토스트로 충분하다.
-      if (document.hidden) {
+      // 실제로 화면을 보고 있지 않을 때만 OS 알림과 탭 타이틀 배지를 사용한다.
+      // 현재 보고 있는 중이면(챗 페이지의 인앱 토스트로 충분하므로) 여기서는 무시한다.
+      if (isBackgrounded()) {
         bumpUnread();
         showNotification(data);
       }
     });
 
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
+    const handleForegroundReturn = () => {
+      if (!isBackgrounded()) {
         resetUnread();
       }
-    });
+    };
+    document.addEventListener("visibilitychange", handleForegroundReturn);
+    window.addEventListener("focus", handleForegroundReturn);
   }
 
   return {
     getSocket: () => socket,
+    isBackgrounded,
   };
 })();

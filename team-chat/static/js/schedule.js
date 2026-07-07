@@ -43,6 +43,35 @@
   function dotClass(category) {
     return category === "work" ? "sched-dot-work" : "sched-dot-leave";
   }
+  function barClass(category) {
+    return category === "work" ? "sched-bar-work" : "sched-bar-leave";
+  }
+  const MAX_BAR_TRACKS = 4;
+  // 여러 날에 걸친 일정이 같은 기간 동안 서로 다른 줄(track)에 그려지도록 배정한다.
+  // (전형적인 "최소 회의실 개수" 그리디 구간 스케줄링 알고리즘)
+  function assignTracks(schedules) {
+    const sorted = [...schedules].sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      const ea = endDateOf(a);
+      const eb = endDateOf(b);
+      return ea < eb ? -1 : ea > eb ? 1 : 0;
+    });
+    const trackEndDates = [];
+    const trackOf = new Map();
+    sorted.forEach((s) => {
+      const start = s.date;
+      const end = endDateOf(s);
+      let track = trackEndDates.findIndex((endDate) => endDate < start);
+      if (track === -1) {
+        track = trackEndDates.length;
+        trackEndDates.push(end);
+      } else {
+        trackEndDates[track] = end;
+      }
+      trackOf.set(s, track);
+    });
+    return trackOf;
+  }
   function endDateOf(s) {
     return s.end_date || s.date;
   }
@@ -129,6 +158,7 @@
         (byDate[d] = byDate[d] || []).push(s);
       });
     });
+    const trackOf = assignTracks(monthSchedules);
 
     for (let i = 0; i < startWeekday; i++) {
       const cell = document.createElement("div");
@@ -148,14 +178,28 @@
       dateEl.textContent = String(day);
       cell.appendChild(dateEl);
 
-      const dots = document.createElement("div");
-      dots.className = "sched-cal-dots";
-      (byDate[dateStr] || []).slice(0, 6).forEach((s) => {
-        const dot = document.createElement("span");
-        dot.className = "sched-dot " + dotClass(s.category);
-        dots.appendChild(dot);
-      });
-      cell.appendChild(dots);
+      const bars = document.createElement("div");
+      bars.className = "sched-cal-bars";
+      const entries = byDate[dateStr] || [];
+      const maxTrack = entries.reduce((max, s) => Math.max(max, trackOf.get(s)), -1);
+      for (let t = 0; t <= Math.min(maxTrack, MAX_BAR_TRACKS - 1); t++) {
+        const slot = document.createElement("div");
+        slot.className = "sched-bar-slot";
+        const s = entries.find((e) => trackOf.get(e) === t);
+        if (s) {
+          const isStart = s.date === dateStr;
+          const isEnd = endDateOf(s) === dateStr;
+          const bar = document.createElement("span");
+          bar.className =
+            "sched-bar " + barClass(s.category) +
+            (isStart ? " start" : "") +
+            (isEnd ? " end" : "");
+          bar.title = entryLabel(s);
+          slot.appendChild(bar);
+        }
+        bars.appendChild(slot);
+      }
+      cell.appendChild(bars);
 
       cell.addEventListener("click", () => {
         selectedDate = dateStr;

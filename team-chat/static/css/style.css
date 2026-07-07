@@ -172,20 +172,35 @@ button { font-family: inherit; }
 .sched-cal-title { font-weight: 600; font-size: 14px; }
 .sched-cal-weekdays, .sched-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
 .sched-cal-weekdays span { text-align: center; font-size: 11px; color: var(--text-muted); padding: 4px 0; }
-.sched-cal-grid { gap: 2px; }
+/* 여러 날짜 셀을 가로지르는 일정 바가 열 사이 간격 없이 이어져 보이도록
+   열 간격(column-gap)은 0으로 두고, 주 사이 구분은 row-gap으로만 준다. */
+.sched-cal-grid { column-gap: 0; row-gap: 2px; }
 .sched-cal-cell {
-  min-height: 52px; border-radius: 6px; border: 1px solid transparent; padding: 4px;
+  min-height: 64px; border-radius: 6px; border: 1px solid transparent; padding: 4px;
   font-size: 11px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  overflow: hidden;
 }
 .sched-cal-cell:not(.empty):hover { border-color: var(--primary); }
 .sched-cal-cell.empty { cursor: default; }
 .sched-cal-cell.today { background: var(--bg); font-weight: 700; }
 .sched-cal-cell.selected { border-color: var(--primary); background: var(--bg); }
-.sched-cal-date { color: var(--text); }
+.sched-cal-date { color: var(--text); position: relative; z-index: 1; }
 .sched-cal-dots { display: flex; flex-wrap: wrap; gap: 2px; }
 .sched-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: var(--text-muted); }
 .sched-dot-leave { background: var(--sched-leave); }
 .sched-dot-work { background: var(--sched-work); }
+
+/* 일정 바: 시작일~종료일 사이를 가로지르는 선으로 표시.
+   셀의 padding(4px) + border(1px)만큼 음수 마진을 주어 옆 셀의 바와 여백 없이 이어지게 한다. */
+.sched-cal-bars { display: flex; flex-direction: column; gap: 2px; margin-top: auto; }
+.sched-bar-slot { height: 6px; }
+.sched-bar {
+  display: block; height: 6px; margin: 0 -5px; background: var(--text-muted);
+}
+.sched-bar.start { margin-left: 0; border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+.sched-bar.end { margin-right: 0; border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+.sched-bar-leave { background: var(--sched-leave); }
+.sched-bar-work { background: var(--sched-work); }
 
 .sched-legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); }
 .sched-legend-item { display: flex; align-items: center; gap: 4px; }

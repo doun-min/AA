@@ -118,6 +118,9 @@
   });
 
   socket.on("mention", (data) => {
+    // 백그라운드 상태(창 비활성/최소화 등)라면 notify.js가 OS 알림 + 탭 배지를 담당하므로
+    // 여기서는 중복으로 토스트/비프를 울리지 않는다.
+    if (window.ChatNotify && window.ChatNotify.isBackgrounded()) return;
     showToast(`${data.sender}님이 [${data.room_name}] 방에서 회원님을 멘션했습니다: ${data.text}`);
     playBeep();
   });
