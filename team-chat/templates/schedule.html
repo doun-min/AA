@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}일정 관리{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="topbar-user"><strong>{{ nickname }}</strong></div>
+  <a class="btn-ghost" href="{{ url_for('pages.rooms_page') }}">채팅으로 이동</a>
+</div>
+
+<div class="page-wrap">
+  <div class="sched-calendar">
+    <div class="sched-cal-header">
+      <button type="button" id="sched-prev-month" class="btn-ghost">&lsaquo;</button>
+      <span id="sched-cal-title" class="sched-cal-title"></span>
+      <button type="button" id="sched-next-month" class="btn-ghost">&rsaquo;</button>
+    </div>
+    <div class="sched-cal-weekdays">
+      <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+    </div>
+    <div id="sched-cal-grid" class="sched-cal-grid"></div>
+    <div class="sched-legend">
+      <span class="sched-legend-item"><i class="sched-dot sched-dot-leave"></i>연차/반차</span>
+      <span class="sched-legend-item"><i class="sched-dot sched-dot-work"></i>업무일정</span>
+    </div>
+  </div>
+
+  <div class="sched-list-panel">
+    <div class="sched-list-header">
+      <span id="sched-list-title" class="sched-list-title"></span>
+      <button type="button" id="sched-add-btn" class="btn-secondary">+ 일정 추가</button>
+    </div>
+    <ul id="sched-list" class="sched-list"></ul>
+
+    <form id="sched-form" class="sched-form" hidden>
+      <input type="hidden" id="sched-form-id">
+      <label>구분
+        <select id="sched-category">
+          <option value="annual">연차</option>
+          <option value="half_day">반차</option>
+          <option value="work">업무일정</option>
+        </select>
+      </label>
+
+      <label>시작 일자 <input type="date" id="sched-start-date" required></label>
+      <div id="sched-start-time-row" class="sched-time-row" hidden>
+        <span class="sched-time-label">시작 시간</span>
+        <div class="sched-time-selects">
+          <select id="sched-start-hour"></select> :
+          <select id="sched-start-minute"></select>
+        </div>
+      </div>
+
+      <label>종료 일자 <input type="date" id="sched-end-date" required></label>
+      <div id="sched-end-time-row" class="sched-time-row" hidden>
+        <span class="sched-time-label">종료 시간</span>
+        <div class="sched-time-selects">
+          <select id="sched-end-hour"></select> :
+          <select id="sched-end-minute"></select>
+        </div>
+      </div>
+
+      <label>내용 <input type="text" id="sched-title" maxlength="100" placeholder="일정 내용 (연차/반차는 생략 가능)"></label>
+      <p id="sched-error" class="error"></p>
+      <div class="sched-form-actions">
+        <button type="submit" class="btn-secondary">저장</button>
+        <button type="button" id="sched-delete-btn" class="btn-danger" hidden>삭제</button>
+        <button type="button" id="sched-cancel-btn" class="btn-ghost">취소</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/schedule.js') }}"></script>
+{% endblock %}

@@ -23,15 +23,4 @@
   });
 
   backdrop.addEventListener("click", closeSidebar);
-
-  document.querySelectorAll(".sidebar-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".sidebar-tab").forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      const target = tab.dataset.tab;
-      document.querySelectorAll(".sidebar-panel").forEach((panel) => {
-        panel.hidden = panel.dataset.panel !== target;
-      });
-    });
-  });
 })();

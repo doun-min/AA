@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}엑셀 변환{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="topbar-user"><strong>{{ nickname }}</strong></div>
+  <a class="btn-ghost" href="{{ url_for('pages.rooms_page') }}">채팅으로 이동</a>
+</div>
+
+<div class="page-wrap page-wrap-narrow">
+  <div class="excel-section">
+    <h3>CSV &harr; 엑셀 변환</h3>
+    <p class="hint">CSV 파일은 엑셀로, 엑셀 파일은 CSV로 변환합니다.</p>
+    <input type="file" id="excel-convert-input" accept=".csv,.xlsx,.xls">
+    <button type="button" id="excel-convert-btn" class="btn-secondary">변환 후 다운로드</button>
+    <p id="excel-convert-status" class="hint"></p>
+  </div>
+  <div class="excel-section">
+    <h3>다중 파일 병합</h3>
+    <p class="hint">첫 번째로 선택한 파일의 헤더를 기준으로 병합됩니다.</p>
+    <input type="file" id="excel-merge-input" accept=".csv,.xlsx,.xls" multiple>
+    <button type="button" id="excel-merge-btn" class="btn-secondary">병합 후 다운로드</button>
+    <p id="excel-merge-status" class="hint"></p>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/excel.js') }}"></script>
+{% endblock %}

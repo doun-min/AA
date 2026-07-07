@@ -1,8 +1,7 @@
 (function () {
-  const sidebar = document.getElementById("sidebar");
-  if (!sidebar) return;
-
   const convertInput = document.getElementById("excel-convert-input");
+  if (!convertInput) return;
+
   const convertBtn = document.getElementById("excel-convert-btn");
   const convertStatus = document.getElementById("excel-convert-status");
 

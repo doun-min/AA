@@ -28,6 +28,22 @@ def _format_entry(s):
     return s["title"]
 
 
+def _format_range(schedule):
+    date = schedule["date"]
+    end_date = schedule.get("end_date") or date
+    start_time = schedule.get("start_time")
+    end_time = schedule.get("end_time")
+
+    start = f"{date} {start_time}" if start_time else date
+    if end_date == date:
+        end = end_time or ""
+    else:
+        end = f"{end_date} {end_time}" if end_time else end_date
+    if not end:
+        return start
+    return f"{start} ~ {end}"
+
+
 def format_banner(schedules):
     if not schedules:
         return "오늘 등록된 일정이 없습니다."
@@ -37,9 +53,9 @@ def format_banner(schedules):
 def _format_detail(schedule):
     label = CATEGORY_LABELS.get(schedule["category"], schedule["category"])
     if schedule["category"] == "work":
-        if schedule.get("start_time"):
-            return f"{schedule['date']} {schedule['start_time']} {schedule['title']}"
-        return f"{schedule['date']} {schedule['title']}"
+        return f"{_format_range(schedule)} {schedule['title']}"
+    if schedule.get("end_date") and schedule["end_date"] != schedule["date"]:
+        return f"{schedule['date']} ~ {schedule['end_date']} {label}"
     return f"{schedule['date']} {label}"
 
 
@@ -65,6 +81,7 @@ def _validate_body(body, require_all=True):
     category = (body.get("category") or "").strip()
     title = (body.get("title") or "").strip()
     date_str = (body.get("date") or "").strip()
+    end_date_str = (body.get("end_date") or "").strip() or date_str
     start_time = (body.get("start_time") or "").strip() or None
     end_time = (body.get("end_time") or "").strip() or None
 
@@ -73,11 +90,18 @@ def _validate_body(body, require_all=True):
     if require_all and not title:
         return None, "일정 내용을 입력해주세요."
     if require_all and not date_str:
-        return None, "날짜를 선택해주세요."
+        return None, "시작 일자를 선택해주세요."
+    if require_all and not end_date_str:
+        return None, "종료 일자를 선택해주세요."
+    if date_str and end_date_str and end_date_str < date_str:
+        return None, "종료 일시가 시작 일시보다 빠를 수 없습니다."
+    if date_str and end_date_str and date_str == end_date_str and start_time and end_time and end_time < start_time:
+        return None, "종료 일시가 시작 일시보다 빠를 수 없습니다."
     return {
         "category": category,
         "title": title,
         "date": date_str,
+        "end_date": end_date_str,
         "start_time": start_time,
         "end_time": end_time,
     }, None
@@ -114,7 +138,7 @@ def create_schedule():
 
     schedule = db.create_schedule(
         nickname, data["category"], data["title"], data["date"],
-        data["start_time"], data["end_time"],
+        data["end_date"], data["start_time"], data["end_time"],
     )
     _notify_schedule_room(nickname, schedule, "등록")
     socketio.emit("schedule_updated", {"date": schedule["date"]})
@@ -138,7 +162,7 @@ def update_schedule(schedule_id):
     old_date = existing["date"]
     schedule = db.update_schedule(
         schedule_id, data["category"], data["title"], data["date"],
-        data["start_time"], data["end_time"],
+        data["end_date"], data["start_time"], data["end_time"],
     )
     _notify_schedule_room(nickname, schedule, "수정")
     socketio.emit("schedule_updated", {"date": old_date})

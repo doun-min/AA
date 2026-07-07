@@ -1,9 +1,7 @@
 (function () {
-  const sidebar = document.getElementById("sidebar");
-  if (!sidebar) return;
-
   const nickname = document.body.dataset.nickname;
   const CATEGORY_LABELS = { annual: "연차", half_day: "반차", work: "업무일정" };
+  const MINUTE_STEP = 10;
 
   const calTitle = document.getElementById("sched-cal-title");
   const calGrid = document.getElementById("sched-cal-grid");
@@ -15,13 +13,23 @@
   const form = document.getElementById("sched-form");
   const formId = document.getElementById("sched-form-id");
   const categorySelect = document.getElementById("sched-category");
-  const dateInput = document.getElementById("sched-date");
-  const timeRow = document.getElementById("sched-time-row");
-  const startTimeInput = document.getElementById("sched-start-time");
+
+  const startDateInput = document.getElementById("sched-start-date");
+  const startTimeRow = document.getElementById("sched-start-time-row");
+  const startHourSelect = document.getElementById("sched-start-hour");
+  const startMinuteSelect = document.getElementById("sched-start-minute");
+
+  const endDateInput = document.getElementById("sched-end-date");
+  const endTimeRow = document.getElementById("sched-end-time-row");
+  const endHourSelect = document.getElementById("sched-end-hour");
+  const endMinuteSelect = document.getElementById("sched-end-minute");
+
   const titleInput = document.getElementById("sched-title");
   const errorEl = document.getElementById("sched-error");
   const deleteBtn = document.getElementById("sched-delete-btn");
   const cancelBtn = document.getElementById("sched-cancel-btn");
+
+  if (!form) return;
 
   function pad(n) {
     return String(n).padStart(2, "0");
@@ -35,11 +43,63 @@
   function dotClass(category) {
     return category === "work" ? "sched-dot-work" : "sched-dot-leave";
   }
-  function entryLabel(s) {
-    if (s.category === "work") {
-      return s.start_time ? `${s.start_time} ${s.title}` : s.title;
+  function endDateOf(s) {
+    return s.end_date || s.date;
+  }
+  function eachDateInRange(startStr, endStr) {
+    const dates = [];
+    let cur = new Date(startStr + "T00:00:00");
+    const end = new Date(endStr + "T00:00:00");
+    while (cur <= end) {
+      dates.push(formatDate(cur));
+      cur.setDate(cur.getDate() + 1);
     }
-    return `${s.nickname} ${CATEGORY_LABELS[s.category] || s.category}`;
+    return dates;
+  }
+  function entryLabel(s) {
+    const end = endDateOf(s);
+    const isRange = end !== s.date;
+    if (s.category === "work") {
+      let when = "";
+      if (isRange) {
+        when = `${s.date}${s.start_time ? " " + s.start_time : ""} ~ ${end}${s.end_time ? " " + s.end_time : ""}`;
+      } else if (s.start_time) {
+        when = s.end_time ? `${s.start_time}~${s.end_time}` : s.start_time;
+      }
+      return when ? `${when} ${s.title}` : s.title;
+    }
+    const label = CATEGORY_LABELS[s.category] || s.category;
+    return isRange ? `${s.nickname} ${label} (${s.date} ~ ${end})` : `${s.nickname} ${label}`;
+  }
+
+  function fillHourOptions(select) {
+    select.innerHTML = "";
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement("option");
+      opt.value = pad(h);
+      opt.textContent = `${pad(h)}시`;
+      select.appendChild(opt);
+    }
+  }
+  function fillMinuteOptions(select) {
+    select.innerHTML = "";
+    for (let m = 0; m < 60; m += MINUTE_STEP) {
+      const opt = document.createElement("option");
+      opt.value = pad(m);
+      opt.textContent = `${pad(m)}분`;
+      select.appendChild(opt);
+    }
+  }
+  fillHourOptions(startHourSelect);
+  fillMinuteOptions(startMinuteSelect);
+  fillHourOptions(endHourSelect);
+  fillMinuteOptions(endMinuteSelect);
+
+  function setTimeSelects(hourSelect, minuteSelect, timeStr, fallback) {
+    const [h, m] = (timeStr || fallback).split(":");
+    hourSelect.value = h;
+    const roundedMinute = pad(Math.round(Number(m) / MINUTE_STEP) * MINUTE_STEP % 60);
+    minuteSelect.value = roundedMinute;
   }
 
   const today = new Date();
@@ -65,7 +125,9 @@
 
     const byDate = {};
     monthSchedules.forEach((s) => {
-      (byDate[s.date] = byDate[s.date] || []).push(s);
+      eachDateInRange(s.date, endDateOf(s)).forEach((d) => {
+        (byDate[d] = byDate[d] || []).push(s);
+      });
     });
 
     for (let i = 0; i < startWeekday; i++) {
@@ -108,7 +170,7 @@
   function renderList() {
     const [, m, d] = selectedDate.split("-").map(Number);
     listTitle.textContent = `${m}월 ${d}일 일정`;
-    const items = monthSchedules.filter((s) => s.date === selectedDate);
+    const items = monthSchedules.filter((s) => selectedDate >= s.date && selectedDate <= endDateOf(s));
     listEl.innerHTML = "";
     if (!items.length) {
       const li = document.createElement("li");
@@ -154,7 +216,9 @@
   }
 
   function updateTimeRowVisibility() {
-    timeRow.hidden = categorySelect.value !== "work";
+    const isWork = categorySelect.value === "work";
+    startTimeRow.hidden = !isWork;
+    endTimeRow.hidden = !isWork;
   }
 
   function openForm(schedule) {
@@ -163,15 +227,19 @@
     if (schedule) {
       formId.value = schedule.id;
       categorySelect.value = schedule.category;
-      dateInput.value = schedule.date;
-      startTimeInput.value = schedule.start_time || "";
+      startDateInput.value = schedule.date;
+      endDateInput.value = endDateOf(schedule);
+      setTimeSelects(startHourSelect, startMinuteSelect, schedule.start_time, "09:00");
+      setTimeSelects(endHourSelect, endMinuteSelect, schedule.end_time, "18:00");
       titleInput.value = schedule.title;
       deleteBtn.hidden = false;
     } else {
       formId.value = "";
       categorySelect.value = "annual";
-      dateInput.value = selectedDate;
-      startTimeInput.value = "";
+      startDateInput.value = selectedDate;
+      endDateInput.value = selectedDate;
+      setTimeSelects(startHourSelect, startMinuteSelect, null, "09:00");
+      setTimeSelects(endHourSelect, endMinuteSelect, null, "18:00");
       titleInput.value = "";
       deleteBtn.hidden = true;
     }
@@ -186,6 +254,9 @@
   addBtn.addEventListener("click", () => openForm(null));
   cancelBtn.addEventListener("click", closeForm);
   categorySelect.addEventListener("change", updateTimeRowVisibility);
+  startDateInput.addEventListener("change", () => {
+    if (endDateInput.value < startDateInput.value) endDateInput.value = startDateInput.value;
+  });
 
   prevBtn.addEventListener("click", () => {
     viewMonth -= 1;
@@ -217,16 +288,34 @@
       }
       title = CATEGORY_LABELS[category];
     }
-    if (!dateInput.value) {
-      errorEl.textContent = "날짜를 선택해주세요.";
+    if (!startDateInput.value) {
+      errorEl.textContent = "시작 일자를 선택해주세요.";
+      return;
+    }
+    if (!endDateInput.value) {
+      errorEl.textContent = "종료 일자를 선택해주세요.";
+      return;
+    }
+    if (endDateInput.value < startDateInput.value) {
+      errorEl.textContent = "종료 일시가 시작 일시보다 빠를 수 없습니다.";
+      return;
+    }
+
+    const isWork = category === "work";
+    const startTime = isWork ? `${startHourSelect.value}:${startMinuteSelect.value}` : "";
+    const endTime = isWork ? `${endHourSelect.value}:${endMinuteSelect.value}` : "";
+    if (isWork && startDateInput.value === endDateInput.value && endTime < startTime) {
+      errorEl.textContent = "종료 일시가 시작 일시보다 빠를 수 없습니다.";
       return;
     }
 
     const body = {
       category,
       title,
-      date: dateInput.value,
-      start_time: category === "work" ? startTimeInput.value : "",
+      date: startDateInput.value,
+      end_date: endDateInput.value,
+      start_time: startTime,
+      end_time: endTime,
     };
     const id = formId.value;
     const url = id ? `/api/schedules/${id}` : "/api/schedules";

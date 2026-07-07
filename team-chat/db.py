@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     category TEXT NOT NULL CHECK(category IN ('annual','half_day','work')),
     title TEXT NOT NULL,
     date TEXT NOT NULL,
+    end_date TEXT,
     start_time TEXT,
     end_time TEXT,
     created_at TEXT NOT NULL,
@@ -96,6 +97,11 @@ def init_db():
     os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
     with db_cursor(commit=True) as cur:
         cur.executescript(SCHEMA)
+        cur.execute("PRAGMA table_info(schedules)")
+        columns = {row["name"] for row in cur.fetchall()}
+        if "end_date" not in columns:
+            cur.execute("ALTER TABLE schedules ADD COLUMN end_date TEXT")
+            cur.execute("UPDATE schedules SET end_date = date WHERE end_date IS NULL")
         cur.execute("SELECT id FROM rooms WHERE type='global' LIMIT 1")
         if cur.fetchone() is None:
             cur.execute(
@@ -316,13 +322,13 @@ def list_messages_with_unread(room_id, limit=200):
     return messages
 
 
-def create_schedule(nickname, category, title, date, start_time=None, end_time=None):
+def create_schedule(nickname, category, title, date, end_date=None, start_time=None, end_time=None):
     now = _now()
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO schedules (nickname, category, title, date, start_time, end_time, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (nickname, category, title, date, start_time, end_time, now, now),
+            "INSERT INTO schedules (nickname, category, title, date, end_date, start_time, end_time, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (nickname, category, title, date, end_date or date, start_time, end_time, now, now),
         )
         schedule_id = cur.lastrowid
         cur.execute("SELECT * FROM schedules WHERE id=?", (schedule_id,))
@@ -336,12 +342,12 @@ def get_schedule(schedule_id):
         return dict(row) if row else None
 
 
-def update_schedule(schedule_id, category, title, date, start_time=None, end_time=None):
+def update_schedule(schedule_id, category, title, date, end_date=None, start_time=None, end_time=None):
     now = _now()
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "UPDATE schedules SET category=?, title=?, date=?, start_time=?, end_time=?, updated_at=? WHERE id=?",
-            (category, title, date, start_time, end_time, now, schedule_id),
+            "UPDATE schedules SET category=?, title=?, date=?, end_date=?, start_time=?, end_time=?, updated_at=? WHERE id=?",
+            (category, title, date, end_date or date, start_time, end_time, now, schedule_id),
         )
         cur.execute("SELECT * FROM schedules WHERE id=?", (schedule_id,))
         row = cur.fetchone()
@@ -361,9 +367,9 @@ def list_schedules_for_month(year, month):
         end = f"{year:04d}-{month + 1:02d}-01"
     with db_cursor() as cur:
         cur.execute(
-            "SELECT * FROM schedules WHERE date >= ? AND date < ? "
+            "SELECT * FROM schedules WHERE date < ? AND end_date >= ? "
             "ORDER BY date ASC, (category='work'), (start_time IS NULL), start_time ASC",
-            (start, end),
+            (end, start),
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -371,7 +377,8 @@ def list_schedules_for_month(year, month):
 def list_schedules_for_date(date_str):
     with db_cursor() as cur:
         cur.execute(
-            "SELECT * FROM schedules WHERE date=? ORDER BY (category='work'), (start_time IS NULL), start_time ASC",
-            (date_str,),
+            "SELECT * FROM schedules WHERE date<=? AND end_date>=? "
+            "ORDER BY (category='work'), (start_time IS NULL), start_time ASC",
+            (date_str, date_str),
         )
         return [dict(r) for r in cur.fetchall()]

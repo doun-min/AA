@@ -67,6 +67,18 @@ def rooms_page():
     )
 
 
+@pages_bp.route("/schedule")
+@auth.login_required
+def schedule_page():
+    return render_template("schedule.html", nickname=session["nickname"])
+
+
+@pages_bp.route("/excel")
+@auth.login_required
+def excel_page():
+    return render_template("excel.html", nickname=session["nickname"])
+
+
 @pages_bp.route("/chat/<int:room_id>")
 @auth.login_required
 def chat_page(room_id):
