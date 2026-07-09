@@ -16,8 +16,12 @@
   </div>
   <div class="excel-section">
     <h3>다중 파일 병합</h3>
-    <p class="hint">첫 번째로 선택한 파일의 헤더를 기준으로 병합됩니다.</p>
+    <p class="hint">엑셀 파일을 선택하면 첫 번째 파일의 시트 목록이 표시됩니다. 시트를 선택하면 같은 이름의 시트를 가진 파일들을 찾아 병합합니다(첫 번째 파일의 헤더 기준).</p>
     <input type="file" id="excel-merge-input" accept=".csv,.xlsx,.xls" multiple>
+    <label id="excel-merge-sheet-row" class="hint" hidden>
+      병합할 시트
+      <select id="excel-merge-sheet-select"></select>
+    </label>
     <button type="button" id="excel-merge-btn" class="btn-secondary">병합 후 다운로드</button>
     <p id="excel-merge-status" class="hint"></p>
   </div>

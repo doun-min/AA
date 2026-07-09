@@ -24,6 +24,8 @@
           <span class="room-name">{{ room.name }}</span>
           {% if room.type == 'global' %}<span class="badge">전체</span>{% endif %}
           {% if room.owner_nickname %}<span class="room-owner">방장: {{ room.owner_nickname }}</span>{% endif %}
+          {% set count = mention_counts.get(room.id, 0) %}
+          <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
         </a>
         {% if room.is_deletable and (room.owner_nickname == nickname or is_superadmin) %}
         <button class="btn-danger btn-delete-room" data-room-id="{{ room.id }}">삭제</button>
@@ -40,6 +42,8 @@
       <li class="room-item">
         <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
           <span class="room-name">{{ room.other }}</span>
+          {% set count = mention_counts.get(room.id, 0) %}
+          <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
         </a>
       </li>
       {% endfor %}

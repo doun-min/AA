@@ -57,6 +57,7 @@ def rooms_page():
     group_rooms = db.list_group_rooms()
     direct_rooms = db.list_direct_rooms_for(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
+    mention_counts = db.get_unread_mention_counts(nickname)
     return render_template(
         "rooms.html",
         nickname=nickname,
@@ -64,6 +65,7 @@ def rooms_page():
         group_rooms=group_rooms,
         direct_rooms=direct_rooms,
         active_users=active_users,
+        mention_counts=mention_counts,
     )
 
 
@@ -77,6 +79,19 @@ def schedule_page():
 @auth.login_required
 def excel_page():
     return render_template("excel.html", nickname=session["nickname"])
+
+
+@pages_bp.route("/defect")
+@auth.login_required
+def defect_page():
+    nickname = session["nickname"]
+    return render_template(
+        "defect.html",
+        nickname=nickname,
+        is_superadmin=auth.is_superadmin(nickname),
+        subjects=db.list_subjects(),
+        issue_fields=db.list_issue_fields(),
+    )
 
 
 @pages_bp.route("/chat/<int:room_id>")

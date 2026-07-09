@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}이슈 공유{% endblock %}
+{% block body %}
+<div class="defect-page" data-nickname="{{ nickname }}" data-is-superadmin="{{ 'true' if is_superadmin else 'false' }}">
+  <div class="topbar">
+    <div class="topbar-user"><strong>이슈 공유</strong></div>
+    <button type="button" id="defect-add-btn" class="btn-secondary">+ 이슈 등록</button>
+  </div>
+
+  {% if is_superadmin %}
+  <div class="admin-panel">
+    <div class="admin-panel-group">
+      <h3>검증 주제 관리</h3>
+      <form id="subject-form" class="admin-panel-row">
+        <input type="text" id="subject-name-input" placeholder="새 주제 이름" maxlength="50" required>
+        <button type="submit" class="btn-secondary">추가</button>
+      </form>
+      <div id="subject-chip-list" class="admin-chip-list"></div>
+    </div>
+    <div class="admin-panel-group">
+      <h3>커스텀 필드 관리</h3>
+      <form id="field-form" class="admin-panel-row">
+        <input type="text" id="field-label-input" placeholder="필드 이름" maxlength="30" required>
+        <button type="submit" class="btn-secondary">추가</button>
+      </form>
+      <div id="field-chip-list" class="admin-chip-list"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="defect-toolbar">
+    <select id="filter-subject"><option value="">전체 주제</option></select>
+    <select id="filter-reporter"><option value="">전체 담당자</option></select>
+    <span class="spacer"></span>
+  </div>
+  <p id="defect-error" class="error"></p>
+
+  <div class="issue-table-wrap">
+    <table class="issue-table">
+      <thead>
+        <tr id="issue-table-head"></tr>
+      </thead>
+      <tbody id="issue-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="issue-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="issue-modal-title">이슈 등록</h2>
+      <button type="button" class="modal-close" id="issue-modal-close">&times;</button>
+    </div>
+    <form id="issue-form" class="modal-body">
+      <input type="hidden" id="issue-id">
+      <label>주제
+        <select id="issue-subject" required></select>
+      </label>
+      <label>TC번호 <input type="text" id="issue-tc-num" maxlength="50"></label>
+      <label>Defect 내용 <textarea id="issue-body" required></textarea></label>
+      <label>재현 방법 <textarea id="issue-steps"></textarea></label>
+      <label>보고자 <input type="text" id="issue-reporter" readonly></label>
+      <div id="issue-custom-fields"></div>
+      <p id="issue-form-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="issue-cancel-btn">취소</button>
+        <button type="submit" class="btn-secondary">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/defect.js') }}"></script>
+{% endblock %}

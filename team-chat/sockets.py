@@ -29,6 +29,16 @@ def _cancel_pending_release(nickname):
             timer.cancel()
 
 
+def _emit_mention_counts(nickname):
+    sids = nickname_to_sids.get(nickname)
+    if not sids:
+        return
+    counts = db.get_unread_mention_counts(nickname)
+    payload = {"total": sum(counts.values()), "rooms": counts}
+    for sid in sids:
+        emit("mention_count_update", payload, room=sid)
+
+
 def _schedule_release(nickname):
     def _do_release():
         with _timer_lock:
@@ -126,10 +136,10 @@ def handle_send_message(data):
     }
     emit("new_message", payload, room=str(room_id))
 
-    mentioned_names = set(MENTION_RE.findall(text))
+    mentioned_names = set(MENTION_RE.findall(text)) - {nickname}
+    if mentioned_names:
+        db.add_mentions(msg["id"], room_id, mentioned_names)
     for name in mentioned_names:
-        if name == nickname:
-            continue
         sids = nickname_to_sids.get(name)
         if not sids:
             continue
@@ -144,6 +154,7 @@ def handle_send_message(data):
                 },
                 room=sid,
             )
+        _emit_mention_counts(name)
 
 
 @socketio.on("mark_read")
@@ -161,6 +172,9 @@ def handle_mark_read(data):
         return
 
     msg_ids = db.mark_messages_read(room_id, nickname, up_to_message_id)
+    mentions_changed = db.mark_mentions_read(room_id, nickname, up_to_message_id)
+    if mentions_changed:
+        _emit_mention_counts(nickname)
     if not msg_ids:
         return
 

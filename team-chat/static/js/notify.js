@@ -47,6 +47,18 @@ window.ChatNotify = (function () {
     }
   }
 
+  function updateSidebarMentionBadge(total) {
+    const badge = document.getElementById("sidebar-mention-badge");
+    if (!badge) return;
+    if (total > 0) {
+      badge.hidden = false;
+      badge.textContent = total;
+    } else {
+      badge.hidden = true;
+      badge.textContent = "";
+    }
+  }
+
   if (nickname) {
     requestPermissionIfNeeded();
     // Safari 등 일부 브라우저는 사용자 제스처 없이 호출된 requestPermission을 무시하므로
@@ -54,6 +66,10 @@ window.ChatNotify = (function () {
     document.addEventListener("click", requestPermissionIfNeeded, { once: true });
 
     socket = io();
+
+    socket.on("mention_count_update", (data) => {
+      updateSidebarMentionBadge(data.total || 0);
+    });
 
     socket.on("mention", (data) => {
       // 채팅 페이지(chat.js)가 로드되어 있고 화면을 보고 있는 중이면 그쪽 인앱 토스트로

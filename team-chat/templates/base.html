@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+(function () {
+  var t = localStorage.getItem('theme');
+  if (t === 'light' || t === 'dark') {
+    document.documentElement.setAttribute('data-theme', t);
+  }
+})();
+</script>
 <title>{% block title %}내부망 팀 채팅{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 {% block head %}{% endblock %}
@@ -14,17 +22,27 @@
 <button type="button" id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="사이드바 토글">&#9776;</button>
 <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
 <aside id="sidebar" class="sidebar">
+  <div class="sidebar-brand">TEAM CHAT</div>
   <nav class="sidebar-nav">
     <a class="sidebar-link {{ 'active' if request.endpoint in ('pages.rooms_page', 'pages.chat_page') else '' }}"
-       href="{{ url_for('pages.rooms_page') }}">채팅</a>
+       href="{{ url_for('pages.rooms_page') }}">
+      채팅
+      <span class="badge-count" id="sidebar-mention-badge" data-count="{{ sidebar_mention_total|default(0) }}" {% if not sidebar_mention_total %}hidden{% endif %}>{{ sidebar_mention_total|default(0) }}</span>
+    </a>
     <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.schedule_page' else '' }}"
        href="{{ url_for('pages.schedule_page') }}">일정 관리</a>
     <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.excel_page' else '' }}"
        href="{{ url_for('pages.excel_page') }}">엑셀 변환</a>
+    <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.defect_page' else '' }}"
+       href="{{ url_for('pages.defect_page') }}">이슈 공유</a>
   </nav>
+  <button type="button" id="theme-toggle" class="sidebar-theme-toggle">🌙 다크모드</button>
 </aside>
 <script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 {% endif %}
+<div class="app-content">
 {% block body %}{% endblock %}
+</div>
 </body>
 </html>

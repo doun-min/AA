@@ -23,6 +23,12 @@
   }
   scrollToBottom();
 
+  // 서버 렌더링(SSR)된 과거 메시지는 멘션이 span으로 감싸져 있지 않으므로,
+  // 소켓으로 오는 새 메시지(appendMessage)와 동일하게 하이라이트를 적용한다.
+  messagesEl.querySelectorAll(".message.type-text .msg-body").forEach((el) => {
+    el.innerHTML = linkifyMentions(el.textContent);
+  });
+
   function markReadIfVisible() {
     if (document.visibilityState === "visible" && latestMessageId) {
       socket.emit("mark_read", { room_id: Number(roomId), up_to_message_id: latestMessageId });

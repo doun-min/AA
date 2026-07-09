@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -80,12 +81,50 @@ CREATE TABLE IF NOT EXISTS schedules (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS mentions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    target_nickname TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    read_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS subjects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived')),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    tc_num TEXT,
+    body TEXT,
+    steps_to_reproduce TEXT,
+    reporter TEXT NOT NULL,
+    custom_fields TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS issue_custom_fields (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
 CREATE INDEX IF NOT EXISTS idx_direct_nickname ON direct_participants(nickname);
 CREATE INDEX IF NOT EXISTS idx_room_participants_room ON room_participants(room_id);
 CREATE INDEX IF NOT EXISTS idx_message_reads_message ON message_reads(message_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(date);
 CREATE INDEX IF NOT EXISTS idx_schedules_nickname ON schedules(nickname);
+CREATE INDEX IF NOT EXISTS idx_mentions_target ON mentions(target_nickname, read_at);
+CREATE INDEX IF NOT EXISTS idx_mentions_room_target ON mentions(room_id, target_nickname);
+CREATE INDEX IF NOT EXISTS idx_issues_subject ON issues(subject_id);
+CREATE INDEX IF NOT EXISTS idx_issues_reporter ON issues(reporter);
 """
 
 
@@ -382,3 +421,152 @@ def list_schedules_for_date(date_str):
             (date_str, date_str),
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+def add_mentions(message_id, room_id, target_nicknames):
+    if not target_nicknames:
+        return
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.executemany(
+            "INSERT INTO mentions (message_id, room_id, target_nickname, created_at, read_at) "
+            "VALUES (?,?,?,?,NULL)",
+            [(message_id, room_id, name, now) for name in target_nicknames],
+        )
+
+
+def get_unread_mention_counts(nickname):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT room_id, COUNT(*) AS c FROM mentions "
+            "WHERE target_nickname=? AND read_at IS NULL GROUP BY room_id",
+            (nickname,),
+        )
+        return {r["room_id"]: r["c"] for r in cur.fetchall()}
+
+
+def mark_mentions_read(room_id, nickname, up_to_message_id):
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE mentions SET read_at=? WHERE room_id=? AND target_nickname=? "
+            "AND read_at IS NULL AND message_id<=?",
+            (now, room_id, nickname, up_to_message_id),
+        )
+        return cur.rowcount > 0
+
+
+def create_subject(name):
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO subjects (name, status, created_at) VALUES (?,?,?)",
+            (name, "active", now),
+        )
+        subject_id = cur.lastrowid
+        cur.execute("SELECT * FROM subjects WHERE id=?", (subject_id,))
+        return dict(cur.fetchone())
+
+
+def list_subjects(status=None):
+    with db_cursor() as cur:
+        if status:
+            cur.execute("SELECT * FROM subjects WHERE status=? ORDER BY created_at ASC", (status,))
+        else:
+            cur.execute("SELECT * FROM subjects ORDER BY created_at ASC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_subject(subject_id):
+    with db_cursor() as cur:
+        cur.execute("SELECT * FROM subjects WHERE id=?", (subject_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def set_subject_status(subject_id, status):
+    with db_cursor(commit=True) as cur:
+        cur.execute("UPDATE subjects SET status=? WHERE id=?", (status, subject_id))
+        cur.execute("SELECT * FROM subjects WHERE id=?", (subject_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def list_issue_fields():
+    with db_cursor() as cur:
+        cur.execute("SELECT * FROM issue_custom_fields ORDER BY created_at ASC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def create_issue_field(label):
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO issue_custom_fields (label, created_at) VALUES (?,?)",
+            (label, now),
+        )
+        field_id = cur.lastrowid
+        cur.execute("SELECT * FROM issue_custom_fields WHERE id=?", (field_id,))
+        return dict(cur.fetchone())
+
+
+def _issue_row_to_dict(row):
+    d = dict(row)
+    try:
+        d["custom_fields"] = json.loads(d["custom_fields"]) if d["custom_fields"] else {}
+    except (TypeError, ValueError):
+        d["custom_fields"] = {}
+    return d
+
+
+def create_issue(subject_id, tc_num, body, steps_to_reproduce, reporter, custom_fields):
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO issues (subject_id, tc_num, body, steps_to_reproduce, reporter, "
+            "custom_fields, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            (subject_id, tc_num, body, steps_to_reproduce, reporter,
+             json.dumps(custom_fields or {}, ensure_ascii=False), now, now),
+        )
+        issue_id = cur.lastrowid
+        cur.execute("SELECT * FROM issues WHERE id=?", (issue_id,))
+        return _issue_row_to_dict(cur.fetchone())
+
+
+def update_issue(issue_id, subject_id, tc_num, body, steps_to_reproduce, custom_fields):
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE issues SET subject_id=?, tc_num=?, body=?, steps_to_reproduce=?, "
+            "custom_fields=?, updated_at=? WHERE id=?",
+            (subject_id, tc_num, body, steps_to_reproduce,
+             json.dumps(custom_fields or {}, ensure_ascii=False), now, issue_id),
+        )
+        cur.execute("SELECT * FROM issues WHERE id=?", (issue_id,))
+        row = cur.fetchone()
+        return _issue_row_to_dict(row) if row else None
+
+
+def get_issue(issue_id):
+    with db_cursor() as cur:
+        cur.execute("SELECT * FROM issues WHERE id=?", (issue_id,))
+        row = cur.fetchone()
+        return _issue_row_to_dict(row) if row else None
+
+
+def list_issues(subject_id=None, reporter=None):
+    query = "SELECT * FROM issues"
+    clauses = []
+    params = []
+    if subject_id:
+        clauses.append("subject_id=?")
+        params.append(subject_id)
+    if reporter:
+        clauses.append("reporter=?")
+        params.append(reporter)
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY created_at DESC"
+    with db_cursor() as cur:
+        cur.execute(query, params)
+        return [_issue_row_to_dict(r) for r in cur.fetchall()]

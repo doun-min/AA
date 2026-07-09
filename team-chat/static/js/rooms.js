@@ -55,4 +55,21 @@
       }
     });
   });
+
+  const socket = window.ChatNotify && window.ChatNotify.getSocket();
+  if (socket) {
+    socket.on("mention_count_update", (data) => {
+      const rooms = data.rooms || {};
+      document.querySelectorAll(".badge-count[data-room-id]").forEach((badge) => {
+        const count = rooms[badge.dataset.roomId] || 0;
+        if (count > 0) {
+          badge.hidden = false;
+          badge.textContent = count;
+        } else {
+          badge.hidden = true;
+          badge.textContent = "";
+        }
+      });
+    });
+  }
 })();
