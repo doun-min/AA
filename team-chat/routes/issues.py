@@ -29,7 +29,7 @@ def list_subjects():
 
 @issues_bp.route("/subjects", methods=["POST"])
 def create_subject():
-    _require_admin()
+    _require_login()
     name = ((request.get_json(silent=True) or {}).get("name") or "").strip()
     if not name:
         return jsonify(error="주제 이름을 입력해주세요."), 400

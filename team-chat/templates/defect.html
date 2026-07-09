@@ -4,7 +4,10 @@
 <div class="defect-page" data-nickname="{{ nickname }}" data-is-superadmin="{{ 'true' if is_superadmin else 'false' }}">
   <div class="topbar">
     <div class="topbar-user"><strong>이슈 공유</strong></div>
-    <button type="button" id="defect-add-btn" class="btn-secondary">+ 이슈 등록</button>
+    <div class="topbar-actions">
+      <button type="button" id="subject-add-btn" class="btn-secondary">+ 주제 등록</button>
+      <button type="button" id="defect-add-btn" class="btn-secondary">+ 이슈 등록</button>
+    </div>
   </div>
 
   {% if is_superadmin %}
@@ -64,6 +67,23 @@
       <p id="issue-form-error" class="error"></p>
       <div class="modal-actions">
         <button type="button" class="btn-ghost" id="issue-cancel-btn">취소</button>
+        <button type="submit" class="btn-secondary">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="subject-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>주제 등록</h2>
+      <button type="button" class="modal-close" id="subject-modal-close">&times;</button>
+    </div>
+    <form id="subject-add-form" class="modal-body">
+      <label>주제 이름 <input type="text" id="subject-add-name" maxlength="50" required></label>
+      <p id="subject-add-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="subject-add-cancel-btn">취소</button>
         <button type="submit" class="btn-secondary">저장</button>
       </div>
     </form>

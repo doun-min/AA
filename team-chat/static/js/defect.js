@@ -10,6 +10,14 @@
   const errorEl = document.getElementById("defect-error");
   const addBtn = document.getElementById("defect-add-btn");
 
+  const subjectAddBtn = document.getElementById("subject-add-btn");
+  const subjectModal = document.getElementById("subject-modal");
+  const subjectModalClose = document.getElementById("subject-modal-close");
+  const subjectAddCancelBtn = document.getElementById("subject-add-cancel-btn");
+  const subjectAddForm = document.getElementById("subject-add-form");
+  const subjectAddName = document.getElementById("subject-add-name");
+  const subjectAddError = document.getElementById("subject-add-error");
+
   const modal = document.getElementById("issue-modal");
   const modalTitle = document.getElementById("issue-modal-title");
   const modalClose = document.getElementById("issue-modal-close");
@@ -189,6 +197,47 @@
   function closeModal() {
     modal.hidden = true;
   }
+
+  function openSubjectModal() {
+    subjectAddError.textContent = "";
+    subjectAddName.value = "";
+    subjectModal.hidden = false;
+    subjectAddName.focus();
+  }
+
+  function closeSubjectModal() {
+    subjectModal.hidden = true;
+  }
+
+  subjectAddBtn.addEventListener("click", openSubjectModal);
+  subjectModalClose.addEventListener("click", closeSubjectModal);
+  subjectAddCancelBtn.addEventListener("click", closeSubjectModal);
+  subjectModal.addEventListener("click", (e) => {
+    if (e.target === subjectModal) closeSubjectModal();
+  });
+
+  subjectAddForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    subjectAddError.textContent = "";
+    const name = subjectAddName.value.trim();
+    if (!name) return;
+    try {
+      const res = await fetch("/api/subjects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        subjectAddError.textContent = data.error || "주제 등록에 실패했습니다.";
+        return;
+      }
+      closeSubjectModal();
+      await loadSubjects();
+    } catch (err) {
+      subjectAddError.textContent = "주제 등록 중 오류가 발생했습니다.";
+    }
+  });
 
   addBtn.addEventListener("click", () => openModal(null));
   modalClose.addEventListener("click", closeModal);
