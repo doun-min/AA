@@ -547,6 +547,12 @@ def update_issue(issue_id, subject_id, tc_num, body, steps_to_reproduce, custom_
         return _issue_row_to_dict(row) if row else None
 
 
+def delete_issue(issue_id):
+    with db_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM issues WHERE id=?", (issue_id,))
+        return cur.rowcount > 0
+
+
 def get_issue(issue_id):
     with db_cursor() as cur:
         cur.execute("SELECT * FROM issues WHERE id=?", (issue_id,))

@@ -1,0 +1,28 @@
+{
+  "name": "team-chat-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Team Chat 트레이 상주형 데스크톱 클라이언트 (내부망 HTTP 서버용)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.teamchat.desktop",
+    "productName": "TeamChat",
+    "files": [
+      "main.js",
+      "assets/**/*",
+      "desktop_config.json"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.png"
+    }
+  }
+}

@@ -144,6 +144,7 @@ button { font-family: inherit; }
 }
 .btn-danger { color: #fff; background: var(--danger); border-color: var(--danger); }
 .btn-ghost { background: transparent; }
+.btn-secondary[hidden], .btn-danger[hidden], .btn-ghost[hidden] { display: none; }
 
 /* chat page */
 .chat-page { display: flex; flex-direction: column; height: 100vh; max-width: 900px; margin: 0 auto; background: var(--surface); }
@@ -392,6 +393,7 @@ button { font-family: inherit; }
 .modal-body textarea { min-height: 70px; resize: vertical; }
 .modal-body input[readonly] { color: var(--text-muted); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.modal-actions .spacer { flex: 1; }
 
 @media (max-width: 720px) {
   .issue-table th, .issue-table td { max-width: 160px; }

@@ -29,10 +29,15 @@ window.ChatNotify = (function () {
   }
 
   function showNotification(data) {
-    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") {
+      console.warn("[notify] OS 알림 권한이 허용되지 않아 팝업을 표시할 수 없습니다:", Notification.permission);
+      return;
+    }
     const noti = new Notification(`${data.sender}님이 회원님을 멘션했습니다`, {
       body: `[${data.room_name}] ${data.text}`,
       tag: `mention-room-${data.room_id}`,
+      renotify: true,
     });
     noti.onclick = () => {
       window.focus();

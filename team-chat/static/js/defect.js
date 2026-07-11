@@ -24,6 +24,7 @@
   const cancelBtn = document.getElementById("issue-cancel-btn");
   const form = document.getElementById("issue-form");
   const formError = document.getElementById("issue-form-error");
+  const deleteBtn = document.getElementById("issue-delete-btn");
   const issueIdInput = document.getElementById("issue-id");
   const issueSubjectSelect = document.getElementById("issue-subject");
   const issueTcNum = document.getElementById("issue-tc-num");
@@ -182,6 +183,7 @@
       issueSteps.value = issue.steps_to_reproduce || "";
       issueReporter.value = issue.reporter;
       renderCustomFieldInputs(issue.custom_fields);
+      deleteBtn.hidden = false;
     } else {
       modalTitle.textContent = "이슈 등록";
       issueIdInput.value = "";
@@ -190,6 +192,7 @@
       issueSteps.value = "";
       issueReporter.value = nickname;
       renderCustomFieldInputs(null);
+      deleteBtn.hidden = true;
     }
     modal.hidden = false;
   }
@@ -278,6 +281,24 @@
       await loadIssues();
     } catch (err) {
       formError.textContent = "저장 중 오류가 발생했습니다.";
+    }
+  });
+
+  deleteBtn.addEventListener("click", async () => {
+    const id = issueIdInput.value;
+    if (!id) return;
+    if (!window.confirm("이 이슈를 삭제하시겠습니까?")) return;
+    try {
+      const res = await fetch(`/api/issues/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        formError.textContent = data.error || "삭제에 실패했습니다.";
+        return;
+      }
+      closeModal();
+      await loadIssues();
+    } catch (err) {
+      formError.textContent = "삭제 중 오류가 발생했습니다.";
     }
   });
 
@@ -391,6 +412,7 @@
       refreshReporterOptions();
     });
     socket.on("issue_updated", () => loadIssues());
+    socket.on("issue_deleted", () => loadIssues());
     socket.on("subject_updated", () => loadSubjects());
     socket.on("issue_field_created", () => {
       loadFields();

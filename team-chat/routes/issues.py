@@ -150,3 +150,13 @@ def update_issue(issue_id):
     )
     socketio.emit("issue_updated", {"issue": issue})
     return jsonify(issue=issue)
+
+
+@issues_bp.route("/issues/<int:issue_id>", methods=["DELETE"])
+def delete_issue(issue_id):
+    _require_login()
+    if not db.get_issue(issue_id):
+        abort(404)
+    db.delete_issue(issue_id)
+    socketio.emit("issue_deleted", {"issue_id": issue_id})
+    return "", 204
