@@ -1,5 +1,3 @@
-from datetime import date as date_cls
-
 from flask import Blueprint, abort, jsonify, request, session
 
 import config
@@ -114,7 +112,7 @@ def list_schedules():
         year = int(request.args.get("year"))
         month = int(request.args.get("month"))
     except (TypeError, ValueError):
-        today = date_cls.today()
+        today = db.today_kst()
         year, month = today.year, today.month
     schedules = db.list_schedules_for_month(year, month)
     return jsonify(schedules=schedules)
@@ -123,7 +121,7 @@ def list_schedules():
 @schedules_bp.route("/today", methods=["GET"])
 def today_schedules():
     _require_login()
-    today_str = date_cls.today().isoformat()
+    today_str = db.today_kst().isoformat()
     schedules = db.list_schedules_for_date(today_str)
     return jsonify(schedules=schedules, banner=format_banner(schedules), date=today_str)
 

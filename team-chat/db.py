@@ -2,9 +2,13 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import config
+
+# 화면/로그 어디서든 created_at을 그대로(타임존 부분만 잘라서) 보여주는 구조라서,
+# 저장 시점에 KST로 기록해두면 별도 변환 없이 모든 표시 위치가 한국 시간으로 나온다.
+KST = timezone(timedelta(hours=9))
 
 
 def get_conn():
@@ -129,7 +133,12 @@ CREATE INDEX IF NOT EXISTS idx_issues_reporter ON issues(reporter);
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(KST).isoformat(timespec="seconds")
+
+
+def today_kst():
+    """서버 OS의 타임존 설정과 무관하게 '오늘'을 한국 기준으로 반환한다."""
+    return datetime.now(KST).date()
 
 
 def init_db():
