@@ -1,5 +1,3 @@
-from datetime import date
-
 from flask import Blueprint, abort, redirect, render_template, request, session, url_for
 
 import auth
@@ -31,6 +29,10 @@ def login_page():
         )
     if "@" in nickname:
         return render_template("login.html", error="닉네임에 '@' 문자는 사용할 수 없습니다.")
+    if nickname == config.MENTION_ALL:
+        return render_template(
+            "login.html", error=f"'{config.MENTION_ALL}'은(는) 예약어라 닉네임으로 사용할 수 없습니다."
+        )
 
     if not auth.try_register_nickname(nickname):
         return render_template("login.html", error="이미 사용 중인 닉네임입니다.")
@@ -109,8 +111,9 @@ def chat_page(room_id):
     is_owner = room.get("owner_nickname") == nickname
     is_superadmin = auth.is_superadmin(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
+    room_members = [n for n in db.get_room_member_nicknames(room_id, room["type"]) if n != nickname]
 
-    today_schedules = db.list_schedules_for_date(date.today().isoformat())
+    today_schedules = db.list_schedules_for_date(db.today_kst().isoformat())
     schedule_banner = format_banner(today_schedules)
 
     return render_template(
@@ -123,5 +126,6 @@ def chat_page(room_id):
         can_manage=is_owner or is_superadmin,
         room_deletable=bool(room["is_deletable"]),
         active_users=active_users,
+        room_members=room_members,
         schedule_banner=schedule_banner,
     )

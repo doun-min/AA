@@ -23,6 +23,10 @@ SUPERADMIN_NAMES = {"admin", "관리자"}
 GLOBAL_ROOM_NAME = "전체"
 SCHEDULE_ROOM_NAME = "일정공유"
 
+# @전체 라고 멘션하면 방 참여자 전원에게 멘션한 것으로 처리한다 (sockets.py).
+# 실제 닉네임과 충돌하면 안 되므로 로그인 시 이 이름은 예약어로 막는다 (routes/pages.py).
+MENTION_ALL = "전체"
+
 NICKNAME_MAX_LENGTH = 20
 ROOM_NAME_MAX_LENGTH = 50
 

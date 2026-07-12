@@ -169,13 +169,25 @@ button { font-family: inherit; }
   background: var(--mention-highlight-bg); color: var(--mention-highlight-text);
   border-radius: 4px; padding: 0 4px; font-weight: 700;
 }
+.mention.mention-all { background: var(--danger); color: #fff; }
 
 .message-form { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
-.message-form input[type="text"] { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.message-form input[type="text"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; }
 .message-form button[type="submit"] {
   padding: 10px 16px; border-radius: 8px; border: none; background: var(--primary);
   color: var(--primary-text); font-weight: 600; cursor: pointer;
 }
+
+.mention-input-wrap { position: relative; flex: 1; }
+.mention-suggest {
+  position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  max-height: 180px; overflow-y: auto; list-style: none; margin: 0; padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); z-index: 10;
+}
+.mention-suggest[hidden] { display: none; }
+.mention-suggest li { padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.mention-suggest li.active, .mention-suggest li:hover { background: var(--mention-bg); }
 
 .toast-container { position: fixed; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
 .toast {

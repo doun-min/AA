@@ -13,6 +13,16 @@
   const attachBtn = document.getElementById("btn-attach");
   const deleteBtn = document.getElementById("btn-delete");
   const transferBtn = document.getElementById("btn-transfer");
+  const mentionSuggest = document.getElementById("mention-suggest");
+
+  const MENTION_ALL = "전체";
+  let roomMembers = [];
+  try {
+    roomMembers = JSON.parse(page.dataset.roomMembers || "[]");
+  } catch (e) {
+    roomMembers = [];
+  }
+  const mentionCandidates = [MENTION_ALL, ...roomMembers];
 
   const socket = (window.ChatNotify && window.ChatNotify.getSocket()) || io();
 
@@ -50,7 +60,10 @@
   }
 
   function linkifyMentions(text) {
-    return escapeHtml(text).replace(/@([^\s@,]+)/g, '<span class="mention">@$1</span>');
+    return escapeHtml(text).replace(/@([^\s@,]+)/g, (match, name) => {
+      const cls = name === MENTION_ALL ? "mention mention-all" : "mention";
+      return `<span class="${cls}">@${name}</span>`;
+    });
   }
 
   function appendMessage(msg) {
@@ -147,12 +160,102 @@
     }
   });
 
+  // ---- 멘션 자동완성 (@를 입력하면 방 멤버 + "전체" 후보를 보여준다) ----
+  let mentionActiveIndex = -1;
+  let mentionMatchStart = -1; // input.value 기준 '@' 문자의 위치
+
+  function closeMentionSuggest() {
+    mentionSuggest.hidden = true;
+    mentionSuggest.innerHTML = "";
+    mentionActiveIndex = -1;
+    mentionMatchStart = -1;
+  }
+
+  function currentMentionQuery() {
+    const pos = input.selectionStart;
+    const uptoCursor = input.value.slice(0, pos);
+    const match = uptoCursor.match(/(?:^|\s)@([^\s@,]*)$/);
+    if (!match) return null;
+    return { query: match[1], start: pos - match[1].length - 1 };
+  }
+
+  function setActiveItem(items, index) {
+    mentionActiveIndex = index;
+    items.forEach((li, i) => li.classList.toggle("active", i === mentionActiveIndex));
+  }
+
+  function selectMention(name) {
+    if (mentionMatchStart < 0) return;
+    const pos = input.selectionStart;
+    const before = input.value.slice(0, mentionMatchStart);
+    const after = input.value.slice(pos);
+    const inserted = `@${name} `;
+    input.value = before + inserted + after;
+    const caret = (before + inserted).length;
+    input.focus();
+    input.setSelectionRange(caret, caret);
+    closeMentionSuggest();
+  }
+
+  function updateMentionSuggest() {
+    const ctx = currentMentionQuery();
+    if (!ctx) {
+      closeMentionSuggest();
+      return;
+    }
+    const q = ctx.query.toLowerCase();
+    const matches = mentionCandidates.filter((n) => n.toLowerCase().startsWith(q)).slice(0, 8);
+    if (!matches.length) {
+      closeMentionSuggest();
+      return;
+    }
+    mentionMatchStart = ctx.start;
+    mentionSuggest.innerHTML = "";
+    matches.forEach((name) => {
+      const li = document.createElement("li");
+      li.textContent = name === MENTION_ALL ? `${name} (방 전원에게 멘션)` : name;
+      li.dataset.name = name;
+      li.addEventListener("mousedown", (e) => {
+        e.preventDefault(); // blur보다 먼저 처리되도록
+        selectMention(name);
+      });
+      mentionSuggest.appendChild(li);
+    });
+    setActiveItem(mentionSuggest.querySelectorAll("li"), 0);
+    mentionSuggest.hidden = false;
+  }
+
+  input.addEventListener("input", updateMentionSuggest);
+  input.addEventListener("click", updateMentionSuggest);
+  input.addEventListener("blur", () => setTimeout(closeMentionSuggest, 100));
+
+  input.addEventListener("keydown", (e) => {
+    if (mentionSuggest.hidden) return;
+    const items = mentionSuggest.querySelectorAll("li");
+    if (!items.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveItem(items, (mentionActiveIndex + 1) % items.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveItem(items, (mentionActiveIndex - 1 + items.length) % items.length);
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      if (mentionActiveIndex >= 0) {
+        e.preventDefault();
+        selectMention(items[mentionActiveIndex].dataset.name);
+      }
+    } else if (e.key === "Escape") {
+      closeMentionSuggest();
+    }
+  });
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
     socket.emit("send_message", { room_id: Number(roomId), text });
     input.value = "";
+    closeMentionSuggest();
   });
 
   attachBtn.addEventListener("click", () => fileInput.click());

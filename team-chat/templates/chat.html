@@ -5,7 +5,8 @@
      data-room-id="{{ room.id }}"
      data-nickname="{{ nickname }}"
      data-room-type="{{ room.type }}"
-     data-last-message-id="{{ messages[-1].id if messages else 0 }}">
+     data-last-message-id="{{ messages[-1].id if messages else 0 }}"
+     data-room-members='{{ room_members|tojson }}'>
   <div class="chat-header">
     <a class="back-link" href="{{ url_for('pages.rooms_page') }}">&larr; 목록</a>
     <h1>{{ room.name }}</h1>
@@ -48,7 +49,10 @@
   <form id="message-form" class="message-form">
     <input type="file" id="file-input" hidden>
     <button type="button" id="btn-attach" class="btn-secondary">📎</button>
-    <input type="text" id="message-input" placeholder="메시지를 입력하세요 (@닉네임 으로 멘션)" autocomplete="off">
+    <div class="mention-input-wrap">
+      <ul id="mention-suggest" class="mention-suggest" hidden></ul>
+      <input type="text" id="message-input" placeholder="메시지를 입력하세요 (@닉네임 또는 @전체 로 멘션)" autocomplete="off">
+    </div>
     <button type="submit">전송</button>
   </form>
 </div>

@@ -5,6 +5,7 @@ from flask import request, session
 from flask_socketio import join_room, leave_room, emit
 
 import auth
+import config
 import db
 from extensions import socketio
 
@@ -137,6 +138,9 @@ def handle_send_message(data):
     emit("new_message", payload, room=str(room_id))
 
     mentioned_names = set(MENTION_RE.findall(text)) - {nickname}
+    if config.MENTION_ALL in mentioned_names:
+        mentioned_names.discard(config.MENTION_ALL)
+        mentioned_names |= set(db.get_room_member_nicknames(room_id, room["type"])) - {nickname}
     if mentioned_names:
         db.add_mentions(msg["id"], room_id, mentioned_names)
     for name in mentioned_names:
