@@ -1,0 +1,110 @@
+====================================================
+Team Chat 사무실 세팅 순서
+====================================================
+
+크게 두 파트로 나뉜다.
+  A) 서버 PC 세팅 (사무실에 상시 켜둘 PC 1대, 최초 1회 + 코드 업데이트 시)
+  B) 클라이언트 exe 빌드 & 팀원 PC 배포 (필요할 때만, 자주 안 해도 됨)
+
+서버 코드(라우트/템플릿/JS/CSS)만 바뀐 경우에는 B는 건드릴 필요 없이
+서버에서 git pull 후 재시작만 하면 된다. (웹 업데이트와 동일)
+
+
+----------------------------------------------------
+A. 서버 PC 세팅
+----------------------------------------------------
+
+[A1] 서버로 쓸 PC의 내부 IP 확인
+     - cmd에서 ipconfig 실행 → IPv4 주소 확인 (예: 192.168.0.10)
+     - 이 IP를 나중에 desktop_config.json에도 그대로 써야 함
+
+[A2] Python 설치 확인
+     - cmd에서: python --version  (3.x 인지 확인, 없으면 python.org에서 설치)
+
+[A3] 소스 받기
+     - git clone <레포 주소>   (이미 받아뒀으면 생략, 업데이트 시엔 git pull)
+
+[A4] 의존성 설치
+     - team-chat 폴더에서:
+       pip install -r requirements.txt
+
+[A5] 자체서명 인증서 생성 (certs 폴더는 git에 안 올라가므로 서버에서 직접 생성)
+     - team-chat 폴더에서 certs 폴더 만들고 그 안에 인증서 생성:
+       mkdir certs
+       openssl req -x509 -newkey rsa:2048 -nodes -keyout certs\key.pem -out certs\cert.pem -days 3650 -subj "/CN=teamchat"
+     - openssl이 없다면 "Git for Windows" 설치 후 Git Bash에서 실행 (openssl 포함되어 있음)
+     - cert.pem, key.pem 두 파일이 certs 폴더에 생겼는지 확인
+     - 이 인증서가 있어야 서버가 https로 뜨고, 브라우저 알림(Notification) 기능이 동작함
+
+[A6] (선택) 환경변수로 설정 변경 가능
+     - CHAT_SECRET_KEY : 세션 암호화 키 (기본값 그대로 써도 내부망이라 큰 문제 없음)
+     - CHAT_HOST        : 기본 0.0.0.0 (모든 네트워크 인터페이스에서 접속 허용)
+     - CHAT_PORT        : 기본 5000
+
+[A7] 방화벽에서 포트 5000 인바운드 허용
+     - Windows 방화벽 → 고급 설정 → 인바운드 규칙 → 새 규칙 → 포트 → TCP 5000 → 허용
+     - (가능하면 사설 IP 대역만 허용하도록 범위 제한)
+
+[A8] 서버 실행
+     - team-chat 폴더에서:
+       python app.py
+     - 콘솔에 에러 없이 떠 있으면 정상. 이 창을 닫으면 서버도 꺼지니 계속 켜둘 것
+       (나중에 필요하면 Windows 작업 스케줄러/서비스로 자동 시작 등록 검토)
+
+[A9] 접속 확인
+     - 같은 네트워크의 다른 PC 브라우저에서:
+       https://<서버IP>:5000   (예: https://192.168.0.10:5000)
+     - 자체서명 인증서라 "안전하지 않음" 경고가 뜨는 게 정상 → 고급 → 계속 진행
+     - 로그인 화면이 뜨면 서버 세팅 완료
+
+
+----------------------------------------------------
+B. 클라이언트(TeamChat.exe) 빌드 & 배포
+----------------------------------------------------
+※ 서버 주소가 바뀌었거나 desktop/main.js를 수정했을 때만 다시 하면 됨
+
+[B1] desktop_config.json에 실제 서버 주소 반영
+     - team-chat/desktop/desktop_config.json 열어서 server_url을 A9에서 확인한
+       주소로 수정:
+       { "server_url": "https://<서버IP>:5000" }
+
+[B2] (최초 1회만) Windows 개발자 모드 켜기
+     - 설정 → 시스템(또는 개인정보 및 보안) → 개발자용 → 개발자 모드 ON
+     - 안 켜면 exe 빌드 중 "Cannot create symbolic link" 에러로 실패함
+
+[B3] (최초 1회만) 패키지 설치
+     - team-chat/desktop 폴더에서:
+       npm install
+
+[B4] exe 빌드
+     - 같은 폴더에서:
+       npm run build:win
+     - 만약 이전에 빌드 실패한 적 있으면 먼저 캐시 삭제 후 재시도:
+       C:\Users\<사용자명>\AppData\Local\electron-builder\Cache\winCodeSign 폴더 삭제
+
+[B5] 결과물 확인
+     - team-chat/desktop/dist 폴더 "바로 아래"(win-unpacked 폴더 밖)에
+       TeamChat *.exe 형태의 단일 파일이 생겼는지 확인
+     - win-unpacked 폴더 안의 exe는 배포용 아님 (그 하나만 주면 실행 안 됨)
+
+[B6] 팀원에게 배포
+     - dist 바로 아래의 TeamChat.exe 파일 + desktop_config.json 두 개를
+       같은 폴더에 넣어서 전달 (USB, 사내 공유폴더, 메신저 등)
+     - 팀원은 그 폴더에서 TeamChat.exe 실행
+     - 첫 실행 시 알림 권한 팝업 뜨면 "허용" 클릭
+
+[B7] 문제 있을 때
+     - 흰 화면/에러 화면이 뜨면: desktop_config.json의 server_url이
+       실제 서버 주소·포트·프로토콜(http/https)과 일치하는지 확인
+     - exe와 같은 폴더에 생기는 teamchat-error.log 파일에 원인이 남으므로
+       확인 후 알려줄 것
+
+
+----------------------------------------------------
+참고: 앞으로 업데이트할 때
+----------------------------------------------------
+- 서버 쪽 코드만 바뀐 경우 (라우트/화면/DB 로직 등)
+  → 서버 PC에서 git pull 후 python app.py 재시작만 하면 끝. B 전체 생략 가능.
+
+- desktop/main.js(트레이/알림/창 동작)를 수정했거나 서버 주소가 바뀐 경우
+  → B4(재빌드)부터 다시 진행 후 팀원들에게 새 exe 재배포 필요.
