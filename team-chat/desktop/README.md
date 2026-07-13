@@ -46,13 +46,20 @@ build.bat
   WebView2(Edge 기반)를 pywebview가 사용한다. Win10 1809+/Win11엔 보통
   기본 탑재돼 있지만, 오래되거나 락다운된 사내 PC엔 없을 수 있으니 실제
   배포 전에 확인이 필요하다.
-- **자체서명 인증서**: 서버가 `certs/cert.pem`으로 이미 https를 켜주므로
-  insecure-origin 허용 자체는 필요 없다. 대신 자체서명 인증서를 WebView2가
-  거부하지 않도록 `webview.settings["IGNORE_SSL_ERRORS"] = True`로 처리한다
-  (환경변수로 브라우저 인자를 넘기는 방식은 설치된 pywebview 버전이
-  `CoreWebView2CreationProperties.AdditionalBrowserArguments`를 코드에서
-  고정값으로 덮어써버려서 동작하지 않는다 — 시도했다가 죽은 코드였음을
-  확인하고 제거했다).
+- **자체서명 인증서(https로 운영하는 경우)**: 서버가 `certs/cert.pem`으로 이미
+  https를 켜주면 그 자체로 secure context라 insecure-origin 허용이 필요 없다.
+  대신 자체서명 인증서를 WebView2가 거부하지 않도록
+  `webview.settings["IGNORE_SSL_ERRORS"] = True`로 처리한다.
+- **cert 없이 http로 운영하는 경우**: Electron은 `app.commandLine.appendSwitch`로
+  `--unsafely-treat-insecure-origin-as-secure`를 자유롭게 넘길 수 있었지만,
+  pywebview에는 WebView2에 브라우저 인자를 추가하는 공개 API가 없다 —
+  `EdgeChrome.__init__`이 `AdditionalBrowserArguments`를 코드에서 항상 고정값
+  으로 채워버려서, `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 환경변수(이 값이
+  비어있을 때만 적용됨)로 우회하는 것도 안 먹힌다(처음엔 이 방식을 시도했다가
+  죽은 코드였음을 확인하고 제거했다). 그래서 `patch_webview2_insecure_origin()`이
+  `EdgeChrome.__init__` 자체를 pywebview 소스 그대로 복사해 플래그 한 줄만 추가한
+  버전으로 통째로 교체하는 몽키패치를 쓴다. `server_url`이 `http://`일 때만
+  적용된다.
 - **알림 권한 자동 승인**: pywebview의 Windows(edgechromium) 백엔드는 알림
   권한 요청(`PermissionRequested`)을 아예 처리하지 않는다(Qt 백엔드만 자동
   승인 코드가 있음). 트레이 상주 앱 특성상 사용자가 권한 팝업을 보고 클릭할
@@ -77,6 +84,11 @@ build.bat
 
 - WebView2 런타임이 배포 대상 PC에 이미 설치돼 있는지 (Win10 1809+/Win11엔
   보통 기본 탑재).
+- `server_url`이 `http://`인 경우, `patch_webview2_insecure_origin()`이
+  pywebview 버전이 바뀌어도 여전히 통하는지. `teamchat-error.log`에
+  "WebView2 insecure-origin 패치 실패" 로그가 없으면 일단 패치 자체는 걸린
+  것이고, 실제로 `Notification.permission`이 `"granted"`가 되는지는 아래
+  방법으로 별도 확인해야 한다.
 - `grant_webview2_notification_permission()`이 실제로 `Notification.permission`을
   `"granted"`로 만들어주는지. 확인 방법: `python main.py`로 띄운 뒤
   `webview.start(debug=True)`로 잠깐 바꿔 개발자 도구를 열고 콘솔에서
@@ -96,12 +108,14 @@ build.bat
    (서버는 `https://내부IP:5000`인데 설정은 `http://...`로 되어 있는 경우 등).
    브라우저로 먼저 `http://서버IP:5000`과 `https://서버IP:5000`을 각각
    열어봐서 어느 쪽이 실제로 뜨는지 확인하고 `desktop_config.json`을 그에 맞춘다.
-   `http://`로 남아있으면 애초에 secure context가 아니라서 알림 권한 자체가
-   막힌다.
 2. 서버가 자체서명 인증서를 쓰는 https인데 WebView2가 이를 신뢰하지 않는
    경우 → `webview.settings["IGNORE_SSL_ERRORS"] = True`로 이미 처리해뒀다.
-3. 알림만 안 오고 화면은 정상이라면, WebView2가 알림 권한 요청을 승인해줄
-   방법이 없어서(기본 동작에 맡겨짐) `Notification.permission`이
+3. `server_url`이 `http://`인데 `patch_webview2_insecure_origin()`이 실패한
+   경우(pywebview 업데이트 등으로) → 그 origin이 secure context로 취급되지
+   않아서 애초에 알림 권한 자체가 막힌다. `teamchat-error.log`의
+   "WebView2 insecure-origin 패치 실패" 로그를 확인한다.
+4. 위 세 가지가 다 정상인데도 알림만 안 온다면, WebView2가 알림 권한 요청을
+   승인해줄 방법이 없어서(기본 동작에 맡겨짐) `Notification.permission`이
    `"default"`/`"denied"`로 남아있는 경우다 →
    `grant_webview2_notification_permission()`이 이를 자동 승인하도록
    추가했다. 그래도 안 되면 위 "확인해야 할 것" 항목대로 devtools에서
