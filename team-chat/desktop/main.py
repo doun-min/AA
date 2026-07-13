@@ -11,7 +11,6 @@ import traceback
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlsplit
 
 APP_NAME = "Team Chat"
 KST = timezone(timedelta(hours=9))
@@ -94,21 +93,54 @@ def error_html(server_url, detail):
     """
 
 
+def grant_webview2_notification_permission(window):
+    """WebView2(edgechromium) 백엔드는 pywebview 6.x 기준 PermissionRequested를
+    전혀 처리하지 않는다(Qt 백엔드는 자동 승인 코드가 있는데 여기는 없음). 트레이
+    상주 앱 특성상 사용자가 권한 팝업을 볼 기회가 없을 수 있으므로, 알림 권한만
+    네이티브 레벨에서 직접 승인한다.
+
+    pywebview의 내부 구현(webview.platforms.winforms.BrowserView,
+    webview.platforms.edgechromium.EdgeChrome)에 기대는 best-effort 처리라
+    pywebview 버전이 바뀌면 깨질 수 있다. 실패해도 앱 동작에는 영향 없다
+    (그냥 알림 자동 승인이 안 되고 기본 동작으로 남을 뿐).
+    """
+    try:
+        from Microsoft.Web.WebView2.Core import (
+            CoreWebView2PermissionKind,
+            CoreWebView2PermissionState,
+        )
+        from webview.platforms.winforms import BrowserView
+
+        def on_permission_requested(sender, args):
+            if args.PermissionKind == CoreWebView2PermissionKind.Notifications:
+                args.State = CoreWebView2PermissionState.Allow
+
+        def on_core_ready(sender, args):
+            if sender.CoreWebView2 is not None:
+                sender.CoreWebView2.PermissionRequested += on_permission_requested
+
+        form = BrowserView.instances.get(window.uid)
+        core_control = getattr(getattr(form, "browser", None), "webview", None)
+        if core_control is None:
+            return
+        if core_control.CoreWebView2 is not None:
+            core_control.CoreWebView2.PermissionRequested += on_permission_requested
+        else:
+            core_control.CoreWebView2InitializationCompleted += on_core_ready
+    except Exception as e:
+        log_error("WebView2 알림 권한 자동 승인 훅 실패 (기본 동작으로 진행)", e)
+
+
 def main():
     import webview
 
     config = load_config()
     server_url = config["server_url"]
-    origin = urlsplit(server_url)
-    origin_str = f"{origin.scheme}://{origin.netloc}"
 
-    # WebView2(Windows의 Chromium 컴포넌트)에 Electron의
-    # unsafely-treat-insecure-origin-as-secure / 인증서 무시 옵션과 동등한 플래그를 넘긴다.
-    # 반드시 webview 창을 만들기(=WebView2 환경 생성) 전에 설정해야 반영된다.
-    os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (
-        f"--ignore-certificate-errors "
-        f"--unsafely-treat-insecure-origin-as-secure={origin_str}"
-    )
+    # 서버(app.py)는 certs/cert.pem이 있으면 자동으로 https로 전환된다(알림 API가
+    # secure context를 요구하기 때문). 여기서 별도의 insecure-origin 허용은 필요
+    # 없고, 대신 자체서명 인증서를 WebView2가 거부하지 않도록만 해주면 된다.
+    webview.settings["IGNORE_SSL_ERRORS"] = True
 
     ok, err = probe_server(server_url)
     if ok:
@@ -149,7 +181,11 @@ def main():
     tray_thread = threading.Thread(target=run_tray, args=(show_window, quit_app), daemon=True)
     tray_thread.start()
 
-    webview.start()
+    def on_gui_ready():
+        if sys.platform == "win32":
+            grant_webview2_notification_permission(window)
+
+    webview.start(func=on_gui_ready)
 
 
 def run_tray(show_window, quit_app):
