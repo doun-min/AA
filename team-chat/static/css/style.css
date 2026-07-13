@@ -147,7 +147,7 @@ button { font-family: inherit; }
 .btn-secondary[hidden], .btn-danger[hidden], .btn-ghost[hidden] { display: none; }
 
 /* chat page */
-.chat-page { display: flex; flex-direction: column; height: 100vh; max-width: 900px; margin: 0 auto; background: var(--surface); }
+.chat-page { position: relative; display: flex; flex-direction: column; height: 100vh; max-width: 900px; margin: 0 auto; background: var(--surface); }
 .chat-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .chat-header h1 { font-size: 16px; margin: 0; flex: 1; }
 .back-link { color: var(--text-muted); text-decoration: none; }
@@ -164,12 +164,19 @@ button { font-family: inherit; }
 .msg-unread[hidden] { display: none; }
 .msg-body { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; word-break: break-word; }
 .message.me .msg-body { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-.msg-image { max-width: 260px; border-radius: 8px; display: block; }
+.msg-image { max-width: 260px; border-radius: 8px; display: block; cursor: pointer; }
 .mention {
   background: var(--mention-highlight-bg); color: var(--mention-highlight-text);
   border-radius: 4px; padding: 0 4px; font-weight: 700;
 }
 .mention.mention-all { background: var(--danger); color: #fff; }
+
+.drag-overlay {
+  position: absolute; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+  background: rgba(79, 109, 245, 0.12); border: 3px dashed var(--primary); border-radius: var(--radius);
+  color: var(--primary); font-weight: 700; font-size: 15px; pointer-events: none;
+}
+.chat-page.drag-over .drag-overlay { display: flex; }
 
 .message-form { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
 .message-form input[type="text"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); box-sizing: border-box; }
@@ -305,12 +312,8 @@ button { font-family: inherit; }
 .sched-item-actions { display: flex; gap: 4px; }
 .sched-item-actions button { font-size: 11px; padding: 4px 8px; }
 
-.sched-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-.sched-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
-.sched-form input, .sched-form select {
-  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px;
-}
-.sched-form-actions { display: flex; gap: 8px; }
+.sched-date-selects { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-muted); }
+.sched-date-selects select { flex: 1; min-width: 0; }
 
 .sched-time-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
 .sched-time-label { flex-shrink: 0; }
@@ -406,6 +409,11 @@ button { font-family: inherit; }
 .modal-body input[readonly] { color: var(--text-muted); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .modal-actions .spacer { flex: 1; }
+
+/* image preview modal */
+.modal.image-modal { max-width: 720px; }
+.image-modal-body { align-items: center; justify-content: center; }
+.image-modal-body img { max-width: 100%; max-height: 70vh; border-radius: 8px; display: block; }
 
 @media (max-width: 720px) {
   .issue-table th, .issue-table td { max-width: 160px; }

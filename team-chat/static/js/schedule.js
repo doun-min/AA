@@ -10,11 +10,16 @@
   const listTitle = document.getElementById("sched-list-title");
   const listEl = document.getElementById("sched-list");
   const addBtn = document.getElementById("sched-add-btn");
+  const schedModal = document.getElementById("sched-modal");
+  const schedModalTitle = document.getElementById("sched-modal-title");
+  const schedModalClose = document.getElementById("sched-modal-close");
   const form = document.getElementById("sched-form");
   const formId = document.getElementById("sched-form-id");
   const categorySelect = document.getElementById("sched-category");
 
-  const startDateInput = document.getElementById("sched-start-date");
+  const startYearSelect = document.getElementById("sched-start-year");
+  const startMonthSelect = document.getElementById("sched-start-month");
+  const startDaySelect = document.getElementById("sched-start-day");
   const startTimeRow = document.getElementById("sched-start-time-row");
   const startHourSelect = document.getElementById("sched-start-hour");
   const startMinuteSelect = document.getElementById("sched-start-minute");
@@ -130,6 +135,58 @@
     const roundedMinute = pad(Math.round(Number(m) / MINUTE_STEP) * MINUTE_STEP % 60);
     minuteSelect.value = roundedMinute;
   }
+
+  // ---- 시작 일자 년/월/일 드롭다운 ----
+  const YEAR_RANGE = 5; // 과거에 등록된 일정 수정 화면에서도 쓰이므로 앞뒤로 넉넉하게 잡는다.
+  function daysInMonth(year, month) {
+    return new Date(year, month, 0).getDate();
+  }
+  function fillYearOptions(select) {
+    select.innerHTML = "";
+    const y = new Date().getFullYear();
+    for (let year = y - YEAR_RANGE; year <= y + YEAR_RANGE; year++) {
+      const opt = document.createElement("option");
+      opt.value = String(year);
+      opt.textContent = String(year);
+      select.appendChild(opt);
+    }
+  }
+  function fillMonthOptions(select) {
+    select.innerHTML = "";
+    for (let m = 1; m <= 12; m++) {
+      const opt = document.createElement("option");
+      opt.value = pad(m);
+      opt.textContent = String(m);
+      select.appendChild(opt);
+    }
+  }
+  // 월이 바뀌면 그 달의 실제 일수(2월 28/29일 등)에 맞춰 일 옵션을 다시 그린다.
+  // 기존에 선택돼 있던 일이 새 달에 없으면(예: 31일 -> 2월) 그 달의 마지막 날로 보정한다.
+  function rebuildDayOptions(select, year, month) {
+    const max = daysInMonth(year, month);
+    const current = Number(select.value) || null;
+    select.innerHTML = "";
+    for (let d = 1; d <= max; d++) {
+      const opt = document.createElement("option");
+      opt.value = pad(d);
+      opt.textContent = String(d);
+      select.appendChild(opt);
+    }
+    if (current) select.value = pad(Math.min(current, max));
+  }
+  function getStartDateStr() {
+    return `${startYearSelect.value}-${startMonthSelect.value}-${startDaySelect.value}`;
+  }
+  function setStartDate(dateStr) {
+    const [y, m, d] = dateStr.split("-");
+    startYearSelect.value = y;
+    startMonthSelect.value = m;
+    rebuildDayOptions(startDaySelect, Number(y), Number(m));
+    startDaySelect.value = d;
+  }
+  fillYearOptions(startYearSelect);
+  fillMonthOptions(startMonthSelect);
+  rebuildDayOptions(startDaySelect, Number(startYearSelect.value), Number(startMonthSelect.value));
 
   const today = new Date();
   let viewYear = today.getFullYear();
@@ -267,21 +324,30 @@
 
   function openForm(schedule) {
     errorEl.textContent = "";
-    form.hidden = false;
+    schedModal.hidden = false;
+    schedModalTitle.textContent = schedule ? "일정 수정" : "일정 추가";
     if (schedule) {
+      // 기존 일정 수정: 이미 지난 날짜의 일정도 (날짜 자체를 바꾸지 않는 한) 수정할 수
+      // 있어야 하므로 과거 날짜 선택 제한을 걸지 않는다.
       formId.value = schedule.id;
       categorySelect.value = schedule.category;
-      startDateInput.value = schedule.date;
+      setStartDate(schedule.date);
+      endDateInput.min = schedule.date;
       endDateInput.value = endDateOf(schedule);
       setTimeSelects(startHourSelect, startMinuteSelect, schedule.start_time, "09:00");
       setTimeSelects(endHourSelect, endMinuteSelect, schedule.end_time, "18:00");
       titleInput.value = schedule.title;
       deleteBtn.hidden = false;
     } else {
+      // 신규 등록: select는 input[type=date]처럼 min 속성으로 과거 선택 자체를
+      // 막을 수 없으므로, 기본값을 오늘(또는 캘린더에서 고른 미래 날짜)로 맞춰두고
+      // 실제 과거 날짜 조합 방지는 제출 시점 검증(아래 submit 핸들러)에서 처리한다.
+      const defaultDate = selectedDate < todayStr() ? todayStr() : selectedDate;
       formId.value = "";
       categorySelect.value = "annual";
-      startDateInput.value = selectedDate;
-      endDateInput.value = selectedDate;
+      setStartDate(defaultDate);
+      endDateInput.min = defaultDate;
+      endDateInput.value = defaultDate;
       setTimeSelects(startHourSelect, startMinuteSelect, null, "09:00");
       setTimeSelects(endHourSelect, endMinuteSelect, null, "18:00");
       titleInput.value = "";
@@ -291,16 +357,32 @@
   }
 
   function closeForm() {
-    form.hidden = true;
+    schedModal.hidden = true;
     errorEl.textContent = "";
   }
 
   addBtn.addEventListener("click", () => openForm(null));
   cancelBtn.addEventListener("click", closeForm);
-  categorySelect.addEventListener("change", updateTimeRowVisibility);
-  startDateInput.addEventListener("change", () => {
-    if (endDateInput.value < startDateInput.value) endDateInput.value = startDateInput.value;
+  schedModalClose.addEventListener("click", closeForm);
+  schedModal.addEventListener("click", (e) => {
+    if (e.target === schedModal) closeForm();
   });
+  categorySelect.addEventListener("change", updateTimeRowVisibility);
+
+  function onStartDateChange() {
+    const startDateStr = getStartDateStr();
+    endDateInput.min = startDateStr;
+    if (endDateInput.value < startDateStr) endDateInput.value = startDateStr;
+  }
+  startYearSelect.addEventListener("change", () => {
+    rebuildDayOptions(startDaySelect, Number(startYearSelect.value), Number(startMonthSelect.value));
+    onStartDateChange();
+  });
+  startMonthSelect.addEventListener("change", () => {
+    rebuildDayOptions(startDaySelect, Number(startYearSelect.value), Number(startMonthSelect.value));
+    onStartDateChange();
+  });
+  startDaySelect.addEventListener("change", onStartDateChange);
 
   prevBtn.addEventListener("click", () => {
     viewMonth -= 1;
@@ -332,23 +414,25 @@
       }
       title = CATEGORY_LABELS[category];
     }
-    if (!startDateInput.value) {
-      errorEl.textContent = "시작 일자를 선택해주세요.";
-      return;
-    }
+    const startDateStr = getStartDateStr();
     if (!endDateInput.value) {
       errorEl.textContent = "종료 일자를 선택해주세요.";
       return;
     }
-    if (endDateInput.value < startDateInput.value) {
+    if (endDateInput.value < startDateStr) {
       errorEl.textContent = "종료 일시가 시작 일시보다 빠를 수 없습니다.";
+      return;
+    }
+    const isEdit = !!formId.value;
+    if (!isEdit && startDateStr < todayStr()) {
+      errorEl.textContent = "지난 날짜에는 일정을 등록할 수 없습니다.";
       return;
     }
 
     const isWork = category === "work";
     const startTime = isWork ? `${startHourSelect.value}:${startMinuteSelect.value}` : "";
     const endTime = isWork ? `${endHourSelect.value}:${endMinuteSelect.value}` : "";
-    if (isWork && startDateInput.value === endDateInput.value && endTime < startTime) {
+    if (isWork && startDateStr === endDateInput.value && endTime < startTime) {
       errorEl.textContent = "종료 일시가 시작 일시보다 빠를 수 없습니다.";
       return;
     }
@@ -356,7 +440,7 @@
     const body = {
       category,
       title,
-      date: startDateInput.value,
+      date: startDateStr,
       end_date: endDateInput.value,
       start_time: startTime,
       end_time: endTime,

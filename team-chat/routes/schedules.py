@@ -133,6 +133,8 @@ def create_schedule():
     data, error = _validate_body(body)
     if error:
         return jsonify(error=error), 400
+    if data["date"] < db.today_kst().isoformat():
+        return jsonify(error="지난 날짜에는 일정을 등록할 수 없습니다."), 400
 
     schedule = db.create_schedule(
         nickname, data["category"], data["title"], data["date"],

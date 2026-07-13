@@ -66,6 +66,39 @@
     });
   }
 
+  // ---- 이미지 미리보기 모달 ----
+  const imageModal = document.getElementById("image-modal");
+  const imageModalImg = document.getElementById("image-modal-img");
+  const imageModalDownload = document.getElementById("image-modal-download");
+  const imageModalClose = document.getElementById("image-modal-close");
+
+  function openImageModal(src, filename) {
+    imageModalImg.src = src;
+    imageModalImg.alt = filename || "";
+    imageModalDownload.href = src;
+    imageModalDownload.download = filename || "";
+    imageModal.hidden = false;
+  }
+
+  function closeImageModal() {
+    imageModal.hidden = true;
+    imageModalImg.src = "";
+  }
+
+  messagesEl.addEventListener("click", (e) => {
+    const img = e.target.closest(".msg-image");
+    if (!img) return;
+    openImageModal(img.getAttribute("src"), img.dataset.filename);
+  });
+
+  imageModalClose.addEventListener("click", closeImageModal);
+  imageModal.addEventListener("click", (e) => {
+    if (e.target === imageModal) closeImageModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !imageModal.hidden) closeImageModal();
+  });
+
   function appendMessage(msg) {
     const div = document.createElement("div");
     const mine = msg.sender === nickname;
@@ -80,7 +113,7 @@
       if (msg.type === "text") {
         body = `<div class="msg-body">${linkifyMentions(msg.content)}</div>`;
       } else if (msg.type === "image") {
-        body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}"><img class="msg-image" src="/files/${roomId}/${msg.file_path}" alt=""></a></div>`;
+        body = `<div class="msg-body"><img class="msg-image" src="/files/${roomId}/${msg.file_path}" data-filename="${escapeHtml(msg.original_filename)}" alt="${escapeHtml(msg.original_filename)}"></div>`;
       } else {
         body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}">📎 ${escapeHtml(msg.original_filename)}</a></div>`;
       }
@@ -258,9 +291,7 @@
     closeMentionSuggest();
   });
 
-  attachBtn.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files[0];
+  async function uploadFile(file) {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
@@ -273,7 +304,49 @@
     } catch (err) {
       alert("업로드 중 오류가 발생했습니다.");
     }
+  }
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    await uploadFile(fileInput.files[0]);
     fileInput.value = "";
+  });
+
+  // ---- 파일 드래그 앤 드롭 업로드 ----
+  // dragleave는 자식 엘리먼트 위를 지나갈 때도 발생하므로, 카운터로 실제
+  // chat-page 영역을 완전히 벗어났을 때만 하이라이트를 해제한다.
+  let dragCounter = 0;
+
+  function isFileDrag(e) {
+    return !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+  }
+
+  page.addEventListener("dragenter", (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragCounter += 1;
+    page.classList.add("drag-over");
+  });
+
+  page.addEventListener("dragover", (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+  });
+
+  page.addEventListener("dragleave", (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragCounter = Math.max(0, dragCounter - 1);
+    if (dragCounter === 0) page.classList.remove("drag-over");
+  });
+
+  page.addEventListener("drop", async (e) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragCounter = 0;
+    page.classList.remove("drag-over");
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    await uploadFile(file);
   });
 
   if (deleteBtn) {

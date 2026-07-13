@@ -37,7 +37,7 @@
           {% if m.type == 'text' %}
             <div class="msg-body">{{ m.content }}</div>
           {% elif m.type == 'image' %}
-            <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" download="{{ m.original_filename }}"><img class="msg-image" src="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" alt="{{ m.original_filename }}"></a></div>
+            <div class="msg-body"><img class="msg-image" src="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" data-filename="{{ m.original_filename }}" alt="{{ m.original_filename }}"></div>
           {% else %}
             <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" download="{{ m.original_filename }}">📎 {{ m.original_filename }}</a></div>
           {% endif %}
@@ -55,9 +55,26 @@
     </div>
     <button type="submit">전송</button>
   </form>
+
+  <div id="drag-overlay" class="drag-overlay">📎 파일을 놓아서 업로드</div>
 </div>
 
 <div id="toast-container" class="toast-container"></div>
+
+<div id="image-modal" class="modal-overlay" hidden>
+  <div class="modal image-modal">
+    <div class="modal-header">
+      <h2 id="image-modal-title">이미지</h2>
+      <button type="button" class="modal-close" id="image-modal-close">&times;</button>
+    </div>
+    <div class="modal-body image-modal-body">
+      <img id="image-modal-img" src="" alt="">
+    </div>
+    <div class="modal-actions">
+      <a id="image-modal-download" class="btn-secondary" href="" download>⬇ 다운로드</a>
+    </div>
+  </div>
+</div>
 
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

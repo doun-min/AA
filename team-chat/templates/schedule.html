@@ -29,8 +29,16 @@
       <button type="button" id="sched-add-btn" class="btn-secondary">+ 일정 추가</button>
     </div>
     <ul id="sched-list" class="sched-list"></ul>
+  </div>
+</div>
 
-    <form id="sched-form" class="sched-form" hidden>
+<div id="sched-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="sched-modal-title">일정 추가</h2>
+      <button type="button" class="modal-close" id="sched-modal-close">&times;</button>
+    </div>
+    <form id="sched-form" class="modal-body">
       <input type="hidden" id="sched-form-id">
       <label>구분
         <select id="sched-category">
@@ -40,7 +48,13 @@
         </select>
       </label>
 
-      <label>시작 일자 <input type="date" id="sched-start-date" required></label>
+      <label>시작 일자
+        <div class="sched-date-selects">
+          <select id="sched-start-year"></select>년
+          <select id="sched-start-month"></select>월
+          <select id="sched-start-day"></select>일
+        </div>
+      </label>
       <div id="sched-start-time-row" class="sched-time-row" hidden>
         <span class="sched-time-label">시작 시간</span>
         <div class="sched-time-selects">
@@ -60,10 +74,11 @@
 
       <label>내용 <input type="text" id="sched-title" maxlength="100" placeholder="일정 내용 (연차/반차는 생략 가능)"></label>
       <p id="sched-error" class="error"></p>
-      <div class="sched-form-actions">
-        <button type="submit" class="btn-secondary">저장</button>
+      <div class="modal-actions">
         <button type="button" id="sched-delete-btn" class="btn-danger" hidden>삭제</button>
+        <span class="spacer"></span>
         <button type="button" id="sched-cancel-btn" class="btn-ghost">취소</button>
+        <button type="submit" class="btn-secondary">저장</button>
       </div>
     </form>
   </div>
