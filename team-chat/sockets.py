@@ -30,12 +30,16 @@ def _cancel_pending_release(nickname):
             timer.cancel()
 
 
-def _emit_mention_counts(nickname):
+def emit_room_badge_counts(nickname):
     sids = nickname_to_sids.get(nickname)
     if not sids:
         return
-    counts = db.get_unread_mention_counts(nickname)
-    payload = {"total": sum(counts.values()), "rooms": counts}
+    # 방 목록 배지(rooms.html)는 그룹/전체 방은 멘션 카운트, 1:1 방은 안 읽은
+    # 메시지 카운트를 쓴다. 사이드바의 총합 배지(total)는 여기서 direct 카운트를
+    # 섞으면 뜻이 흐려지므로 지금처럼 멘션 총합만 유지한다(OS 알림도 멘션 기준 그대로).
+    mention_counts = db.get_unread_mention_counts(nickname)
+    room_counts = {**mention_counts, **db.get_unread_direct_message_counts(nickname)}
+    payload = {"total": sum(mention_counts.values()), "rooms": room_counts}
     for sid in sids:
         emit("mention_count_update", payload, room=sid)
 
@@ -158,7 +162,15 @@ def handle_send_message(data):
                 },
                 room=sid,
             )
-        _emit_mention_counts(name)
+        emit_room_badge_counts(name)
+
+    # 1:1 방은 멘션 여부와 무관하게 메시지가 오면 방 목록 배지를 띄워야 하므로,
+    # 멘션으로 이미 알림을 보낸 상대가 아니라면 여기서 별도로 배지만 갱신한다
+    # (OS 알림(emit("mention", ...))은 위 멘션 루프에서만 발생하며 여기서는 건드리지 않는다).
+    if room["type"] == "direct":
+        for member in db.get_room_member_nicknames(room_id, "direct"):
+            if member != nickname and member not in mentioned_names:
+                emit_room_badge_counts(member)
 
 
 @socketio.on("mark_read")
@@ -177,8 +189,10 @@ def handle_mark_read(data):
 
     msg_ids = db.mark_messages_read(room_id, nickname, up_to_message_id)
     mentions_changed = db.mark_mentions_read(room_id, nickname, up_to_message_id)
-    if mentions_changed:
-        _emit_mention_counts(nickname)
+    # direct 방은 메시지를 읽음 처리한 것 자체가 배지 카운트에 영향을 주므로
+    # (멘션 여부와 무관하게) 메시지가 실제로 읽음 처리됐다면 항상 다시 계산해 보낸다.
+    if mentions_changed or (room["type"] == "direct" and msg_ids):
+        emit_room_badge_counts(nickname)
     if not msg_ids:
         return
 

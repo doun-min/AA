@@ -31,7 +31,7 @@ def upload_file(room_id):
     nickname = session.get("nickname")
     if not nickname:
         abort(401)
-    _check_room_access(room_id, nickname)
+    room = _check_room_access(room_id, nickname)
 
     upload = request.files.get("file")
     if not upload or not upload.filename:
@@ -67,6 +67,16 @@ def upload_file(room_id):
         "unread_count": unread_count,
     }
     socketio.emit("new_message", payload, room=str(room_id))
+
+    if room["type"] == "direct":
+        # 1:1 방에서 파일/이미지를 보낸 경우에도 상대방 방 목록 배지를 즉시 갱신한다
+        # (텍스트 메시지의 sockets.handle_send_message와 동일한 처리).
+        from sockets import emit_room_badge_counts
+
+        for member in db.get_room_member_nicknames(room_id, "direct"):
+            if member != nickname:
+                emit_room_badge_counts(member)
+
     return jsonify(message=payload), 201
 
 

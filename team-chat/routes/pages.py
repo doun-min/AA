@@ -59,7 +59,12 @@ def rooms_page():
     group_rooms = db.list_group_rooms()
     direct_rooms = db.list_direct_rooms_for(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
-    mention_counts = db.get_unread_mention_counts(nickname)
+    # 1:1 방은 멘션 여부와 무관하게 안 읽은 메시지 수로 배지를 표시하므로,
+    # 멘션 카운트 위에 direct 방 카운트를 덮어씌운다(그룹/전체 방은 멘션 카운트 그대로).
+    mention_counts = {
+        **db.get_unread_mention_counts(nickname),
+        **db.get_unread_direct_message_counts(nickname),
+    }
     return render_template(
         "rooms.html",
         nickname=nickname,

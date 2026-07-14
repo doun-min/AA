@@ -444,6 +444,25 @@ def add_mentions(message_id, room_id, target_nicknames):
         )
 
 
+def get_unread_direct_message_counts(nickname):
+    """1:1(direct) 방에서 상대가 보낸, 아직 읽지 않은 메시지 개수를 방별로 센다.
+    멘션 여부와 무관하게 모든 메시지를 카운트한다 — 1:1 대화는 특성상 서로 멘션을
+    안 붙이는 경우가 많아 멘션 배지만으로는 새 메시지 도착을 알아채기 어렵기 때문."""
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT m.room_id AS room_id, COUNT(*) AS c
+            FROM messages m
+            JOIN direct_participants dp ON dp.room_id = m.room_id AND dp.nickname = ?
+            WHERE m.sender != ? AND m.type != 'system'
+              AND m.id NOT IN (SELECT message_id FROM message_reads WHERE user_id = ?)
+            GROUP BY m.room_id
+            """,
+            (nickname, nickname, nickname),
+        )
+        return {r["room_id"]: r["c"] for r in cur.fetchall()}
+
+
 def get_unread_mention_counts(nickname):
     with db_cursor() as cur:
         cur.execute(
