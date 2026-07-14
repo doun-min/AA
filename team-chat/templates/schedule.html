@@ -63,7 +63,13 @@
         </div>
       </div>
 
-      <label>종료 일자 <input type="date" id="sched-end-date" required></label>
+      <label>종료 일자
+        <div class="sched-date-selects">
+          <select id="sched-end-year"></select>년
+          <select id="sched-end-month"></select>월
+          <select id="sched-end-day"></select>일
+        </div>
+      </label>
       <div id="sched-end-time-row" class="sched-time-row" hidden>
         <span class="sched-time-label">종료 시간</span>
         <div class="sched-time-selects">

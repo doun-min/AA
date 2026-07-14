@@ -24,7 +24,9 @@
   const startHourSelect = document.getElementById("sched-start-hour");
   const startMinuteSelect = document.getElementById("sched-start-minute");
 
-  const endDateInput = document.getElementById("sched-end-date");
+  const endYearSelect = document.getElementById("sched-end-year");
+  const endMonthSelect = document.getElementById("sched-end-month");
+  const endDaySelect = document.getElementById("sched-end-day");
   const endTimeRow = document.getElementById("sched-end-time-row");
   const endHourSelect = document.getElementById("sched-end-hour");
   const endMinuteSelect = document.getElementById("sched-end-minute");
@@ -136,7 +138,7 @@
     minuteSelect.value = roundedMinute;
   }
 
-  // ---- 시작 일자 년/월/일 드롭다운 ----
+  // ---- 시작/종료 일자 년/월/일 드롭다운 ----
   const YEAR_RANGE = 5; // 과거에 등록된 일정 수정 화면에서도 쓰이므로 앞뒤로 넉넉하게 잡는다.
   function daysInMonth(year, month) {
     return new Date(year, month, 0).getDate();
@@ -174,19 +176,32 @@
     }
     if (current) select.value = pad(Math.min(current, max));
   }
+  function getDateStr(yearSelect, monthSelect, daySelect) {
+    return `${yearSelect.value}-${monthSelect.value}-${daySelect.value}`;
+  }
+  function setDateSelects(yearSelect, monthSelect, daySelect, dateStr) {
+    const [y, m, d] = dateStr.split("-");
+    yearSelect.value = y;
+    monthSelect.value = m;
+    rebuildDayOptions(daySelect, Number(y), Number(m));
+    daySelect.value = d;
+  }
   function getStartDateStr() {
-    return `${startYearSelect.value}-${startMonthSelect.value}-${startDaySelect.value}`;
+    return getDateStr(startYearSelect, startMonthSelect, startDaySelect);
   }
   function setStartDate(dateStr) {
-    const [y, m, d] = dateStr.split("-");
-    startYearSelect.value = y;
-    startMonthSelect.value = m;
-    rebuildDayOptions(startDaySelect, Number(y), Number(m));
-    startDaySelect.value = d;
+    setDateSelects(startYearSelect, startMonthSelect, startDaySelect, dateStr);
   }
-  fillYearOptions(startYearSelect);
-  fillMonthOptions(startMonthSelect);
+  function getEndDateStr() {
+    return getDateStr(endYearSelect, endMonthSelect, endDaySelect);
+  }
+  function setEndDate(dateStr) {
+    setDateSelects(endYearSelect, endMonthSelect, endDaySelect, dateStr);
+  }
+  [startYearSelect, endYearSelect].forEach(fillYearOptions);
+  [startMonthSelect, endMonthSelect].forEach(fillMonthOptions);
   rebuildDayOptions(startDaySelect, Number(startYearSelect.value), Number(startMonthSelect.value));
+  rebuildDayOptions(endDaySelect, Number(endYearSelect.value), Number(endMonthSelect.value));
 
   const today = new Date();
   let viewYear = today.getFullYear();
@@ -332,8 +347,7 @@
       formId.value = schedule.id;
       categorySelect.value = schedule.category;
       setStartDate(schedule.date);
-      endDateInput.min = schedule.date;
-      endDateInput.value = endDateOf(schedule);
+      setEndDate(endDateOf(schedule));
       setTimeSelects(startHourSelect, startMinuteSelect, schedule.start_time, "09:00");
       setTimeSelects(endHourSelect, endMinuteSelect, schedule.end_time, "18:00");
       titleInput.value = schedule.title;
@@ -346,8 +360,7 @@
       formId.value = "";
       categorySelect.value = "annual";
       setStartDate(defaultDate);
-      endDateInput.min = defaultDate;
-      endDateInput.value = defaultDate;
+      setEndDate(defaultDate);
       setTimeSelects(startHourSelect, startMinuteSelect, null, "09:00");
       setTimeSelects(endHourSelect, endMinuteSelect, null, "18:00");
       titleInput.value = "";
@@ -369,10 +382,11 @@
   });
   categorySelect.addEventListener("change", updateTimeRowVisibility);
 
+  // 종료일이 시작일보다 빠르게 선택되면 시작일과 같은 날로 보정한다.
+  // (select는 input[type=date]의 min 속성 같은 네이티브 제한이 없어서 직접 맞춰준다.)
   function onStartDateChange() {
     const startDateStr = getStartDateStr();
-    endDateInput.min = startDateStr;
-    if (endDateInput.value < startDateStr) endDateInput.value = startDateStr;
+    if (getEndDateStr() < startDateStr) setEndDate(startDateStr);
   }
   startYearSelect.addEventListener("change", () => {
     rebuildDayOptions(startDaySelect, Number(startYearSelect.value), Number(startMonthSelect.value));
@@ -383,6 +397,13 @@
     onStartDateChange();
   });
   startDaySelect.addEventListener("change", onStartDateChange);
+
+  endYearSelect.addEventListener("change", () => {
+    rebuildDayOptions(endDaySelect, Number(endYearSelect.value), Number(endMonthSelect.value));
+  });
+  endMonthSelect.addEventListener("change", () => {
+    rebuildDayOptions(endDaySelect, Number(endYearSelect.value), Number(endMonthSelect.value));
+  });
 
   prevBtn.addEventListener("click", () => {
     viewMonth -= 1;
@@ -415,11 +436,8 @@
       title = CATEGORY_LABELS[category];
     }
     const startDateStr = getStartDateStr();
-    if (!endDateInput.value) {
-      errorEl.textContent = "종료 일자를 선택해주세요.";
-      return;
-    }
-    if (endDateInput.value < startDateStr) {
+    const endDateStr = getEndDateStr();
+    if (endDateStr < startDateStr) {
       errorEl.textContent = "종료 일시가 시작 일시보다 빠를 수 없습니다.";
       return;
     }
@@ -432,7 +450,7 @@
     const isWork = category === "work";
     const startTime = isWork ? `${startHourSelect.value}:${startMinuteSelect.value}` : "";
     const endTime = isWork ? `${endHourSelect.value}:${endMinuteSelect.value}` : "";
-    if (isWork && startDateStr === endDateInput.value && endTime < startTime) {
+    if (isWork && startDateStr === endDateStr && endTime < startTime) {
       errorEl.textContent = "종료 일시가 시작 일시보다 빠를 수 없습니다.";
       return;
     }
@@ -441,7 +459,7 @@
       category,
       title,
       date: startDateStr,
-      end_date: endDateInput.value,
+      end_date: endDateStr,
       start_time: startTime,
       end_time: endTime,
     };
