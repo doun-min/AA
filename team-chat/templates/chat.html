@@ -11,6 +11,9 @@
     <a class="back-link" href="{{ url_for('pages.rooms_page') }}">&larr; 목록</a>
     <h1>{{ room.name }}</h1>
     <div class="chat-actions">
+      {% if room.type == 'group' and room.is_private %}
+      <button id="btn-members" class="btn-secondary">멤버</button>
+      {% endif %}
       {% if can_manage and room.type != 'direct' %}
       <button id="btn-transfer" class="btn-secondary">방장 위임</button>
       {% endif %}
@@ -75,6 +78,42 @@
     </div>
   </div>
 </div>
+
+{% if room.type == 'group' and room.is_private %}
+<div id="members-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>멤버 관리</h2>
+      <button type="button" class="modal-close" id="members-modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <ul id="members-list" class="room-list">
+        <li class="room-item" data-nickname="{{ nickname }}">
+          <span class="room-name">{{ nickname }} (나){% if nickname == room.owner_nickname %} · 방장{% endif %}</span>
+        </li>
+        {% for m in room_members %}
+        <li class="room-item" data-nickname="{{ m }}">
+          <span class="room-name">{{ m }}{% if m == room.owner_nickname %} · 방장{% endif %}</span>
+          {% if can_manage and m != room.owner_nickname %}
+          <button type="button" class="btn-danger btn-remove-member" data-nickname="{{ m }}">제거</button>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if can_manage %}
+      <div class="member-invite-row">
+        <select id="invite-select">
+          <option value="">초대할 사용자 선택</option>
+          {% for u in invitable_users %}<option value="{{ u }}">{{ u }}</option>{% endfor %}
+        </select>
+        <button type="button" id="btn-invite" class="btn-secondary">초대</button>
+      </div>
+      {% endif %}
+      <p id="members-error" class="error"></p>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

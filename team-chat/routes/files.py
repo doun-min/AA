@@ -15,7 +15,7 @@ def _check_room_access(room_id, nickname):
     room = db.get_room(room_id)
     if not room:
         abort(404)
-    if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
+    if not db.can_access_room(room, nickname):
         abort(403)
     return room
 

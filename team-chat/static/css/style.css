@@ -126,6 +126,10 @@ body {
   color: var(--primary-text); font-weight: 600; cursor: pointer;
 }
 
+.member-picker { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px; }
+.member-picker .hint { flex-basis: 100%; margin-bottom: 2px; }
+.member-picker-item { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+
 .room-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .room-item {
   display: flex; align-items: center; justify-content: space-between;
@@ -414,6 +418,10 @@ button { font-family: inherit; }
 .modal.image-modal { max-width: 720px; }
 .image-modal-body { align-items: center; justify-content: center; }
 .image-modal-body img { max-width: 100%; max-height: 70vh; border-radius: 8px; display: block; }
+
+/* members modal */
+.member-invite-row { display: flex; gap: 8px; margin-top: 8px; }
+.member-invite-row select { flex: 1; }
 
 @media (max-width: 720px) {
   .issue-table th, .issue-table td { max-width: 160px; }

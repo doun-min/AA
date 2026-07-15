@@ -56,7 +56,7 @@ def logout():
 @auth.login_required
 def rooms_page():
     nickname = session["nickname"]
-    group_rooms = db.list_group_rooms()
+    group_rooms = db.list_group_rooms_for(nickname)
     direct_rooms = db.list_direct_rooms_for(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
     # 1:1 방은 멘션 여부와 무관하게 안 읽은 메시지 수로 배지를 표시하므로,
@@ -108,7 +108,7 @@ def chat_page(room_id):
     room = db.get_room(room_id)
     if not room:
         abort(404)
-    if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
+    if not db.can_access_room(room, nickname):
         abort(403)
 
     db.ensure_room_participant(room_id, nickname)
@@ -117,6 +117,8 @@ def chat_page(room_id):
     is_superadmin = auth.is_superadmin(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
     room_members = [n for n in db.get_room_member_nicknames(room_id, room["type"]) if n != nickname]
+    # 비공개 방 초대 후보: 현재 접속 중이면서 아직 멤버가 아닌 사용자
+    invitable_users = [u for u in active_users if u not in room_members]
 
     today_schedules = db.list_schedules_for_date(db.today_kst().isoformat())
     schedule_banner = format_banner(today_schedules)
@@ -132,5 +134,6 @@ def chat_page(room_id):
         room_deletable=bool(room["is_deletable"]),
         active_users=active_users,
         room_members=room_members,
+        invitable_users=invitable_users,
         schedule_banner=schedule_banner,
     )

@@ -16,6 +16,15 @@
       <input type="text" id="new-room-name" placeholder="새 방 이름" maxlength="50" required>
       <button type="submit">방 만들기</button>
     </form>
+    <div class="member-picker">
+      <p class="hint">초대할 인원 선택 (접속 중인 사용자만 선택 가능, 안 골라도 방은 만들어집니다)</p>
+      {% for user in active_users %}
+      <label class="member-picker-item">
+        <input type="checkbox" class="new-room-member" value="{{ user }}"> {{ user }}
+      </label>
+      {% endfor %}
+      {% if not active_users %}<p class="hint">현재 접속 중인 다른 사용자가 없습니다.</p>{% endif %}
+    </div>
     <p id="room-error" class="error"></p>
     <ul class="room-list">
       {% for room in group_rooms %}
@@ -23,6 +32,7 @@
         <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
           <span class="room-name">{{ room.name }}</span>
           {% if room.type == 'global' %}<span class="badge">전체</span>{% endif %}
+          {% if room.is_private %}<span class="badge">🔒 비공개</span>{% endif %}
           {% if room.owner_nickname %}<span class="room-owner">방장: {{ room.owner_nickname }}</span>{% endif %}
           {% set count = mention_counts.get(room.id, 0) %}
           <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>

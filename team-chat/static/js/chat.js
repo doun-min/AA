@@ -193,6 +193,21 @@
     }
   });
 
+  socket.on("room_member_added", (data) => {
+    if (Number(data.room_id) !== Number(roomId)) return;
+    if (data.nickname) addMemberToUI(data.nickname);
+  });
+
+  socket.on("room_member_removed", (data) => {
+    if (Number(data.room_id) !== Number(roomId)) return;
+    if (data.nickname === nickname) {
+      alert("이 방에서 제외되었습니다.");
+      window.location.href = "/rooms";
+      return;
+    }
+    removeMemberFromUI(data.nickname);
+  });
+
   // ---- 멘션 자동완성 (@를 입력하면 방 멤버 + "전체" 후보를 보여준다) ----
   let mentionActiveIndex = -1;
   let mentionMatchStart = -1; // input.value 기준 '@' 문자의 위치
@@ -377,6 +392,111 @@
         window.location.reload();
       } else {
         alert(data.error || "위임에 실패했습니다.");
+      }
+    });
+  }
+
+  // ---- 비공개 방 멤버 관리 모달 ----
+  const membersBtn = document.getElementById("btn-members");
+  const membersModal = document.getElementById("members-modal");
+
+  function addMemberToUI(memberNickname) {
+    if (!membersModal) return;
+    const list = document.getElementById("members-list");
+    if (!list || list.querySelector(`[data-nickname="${CSS.escape(memberNickname)}"]`)) return;
+    const li = document.createElement("li");
+    li.className = "room-item";
+    li.dataset.nickname = memberNickname;
+    li.innerHTML = `<span class="room-name">${escapeHtml(memberNickname)}</span>`;
+    const canManage = !!document.getElementById("invite-select");
+    if (canManage) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-danger btn-remove-member";
+      btn.dataset.nickname = memberNickname;
+      btn.textContent = "제거";
+      li.appendChild(btn);
+    }
+    list.appendChild(li);
+    const inviteSelect = document.getElementById("invite-select");
+    if (inviteSelect) {
+      const opt = inviteSelect.querySelector(`option[value="${CSS.escape(memberNickname)}"]`);
+      if (opt) opt.remove();
+    }
+  }
+
+  function removeMemberFromUI(memberNickname) {
+    if (!membersModal) return;
+    const list = document.getElementById("members-list");
+    const li = list && list.querySelector(`[data-nickname="${CSS.escape(memberNickname)}"]`);
+    if (li) li.remove();
+    const inviteSelect = document.getElementById("invite-select");
+    if (inviteSelect && !inviteSelect.querySelector(`option[value="${CSS.escape(memberNickname)}"]`)) {
+      const opt = document.createElement("option");
+      opt.value = memberNickname;
+      opt.textContent = memberNickname;
+      inviteSelect.appendChild(opt);
+    }
+  }
+
+  if (membersBtn && membersModal) {
+    const membersModalClose = document.getElementById("members-modal-close");
+    const membersError = document.getElementById("members-error");
+    const inviteBtn = document.getElementById("btn-invite");
+    const inviteSelect = document.getElementById("invite-select");
+
+    membersBtn.addEventListener("click", () => {
+      if (membersError) membersError.textContent = "";
+      membersModal.hidden = false;
+    });
+    membersModalClose.addEventListener("click", () => {
+      membersModal.hidden = true;
+    });
+    membersModal.addEventListener("click", (e) => {
+      if (e.target === membersModal) membersModal.hidden = true;
+    });
+
+    if (inviteBtn && inviteSelect) {
+      inviteBtn.addEventListener("click", async () => {
+        const target = inviteSelect.value;
+        if (membersError) membersError.textContent = "";
+        if (!target) return;
+        try {
+          const res = await fetch(`/api/rooms/${roomId}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nickname: target }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            if (membersError) membersError.textContent = data.error || "초대에 실패했습니다.";
+            return;
+          }
+          addMemberToUI(target);
+        } catch (err) {
+          if (membersError) membersError.textContent = "초대 중 오류가 발생했습니다.";
+        }
+      });
+    }
+
+    document.getElementById("members-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".btn-remove-member");
+      if (!btn) return;
+      const target = btn.dataset.nickname;
+      if (!confirm(`${target}님을 방에서 제외하시겠습니까?`)) return;
+      if (membersError) membersError.textContent = "";
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/members/${encodeURIComponent(target)}`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (membersError) membersError.textContent = data.error || "제외에 실패했습니다.";
+          return;
+        }
+        removeMemberFromUI(target);
+      } catch (err) {
+        if (membersError) membersError.textContent = "제외 중 오류가 발생했습니다.";
       }
     });
   }

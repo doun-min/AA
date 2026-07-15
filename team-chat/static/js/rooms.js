@@ -9,10 +9,11 @@
       errorEl.textContent = "";
       const name = nameInput.value.trim();
       if (!name) return;
+      const members = Array.from(document.querySelectorAll(".new-room-member:checked")).map((el) => el.value);
       const res = await fetch("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, members }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -71,5 +72,9 @@
         }
       });
     });
+
+    // 새 비공개 방에 초대되면(또는 방에서 빠지면) 방 목록을 다시 그려야 하므로 새로고침한다.
+    socket.on("room_member_added", () => window.location.reload());
+    socket.on("room_member_removed", () => window.location.reload());
   }
 })();

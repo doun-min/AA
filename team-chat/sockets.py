@@ -96,7 +96,7 @@ def handle_join(data):
     room = db.get_room(room_id)
     if not room:
         return
-    if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
+    if not db.can_access_room(room, nickname):
         return
     join_room(str(room_id))
     room_members.setdefault(room_id, set()).add(nickname)
@@ -125,7 +125,7 @@ def handle_send_message(data):
     room = db.get_room(room_id)
     if not room:
         return
-    if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
+    if not db.can_access_room(room, nickname):
         return
 
     msg = db.add_message(room_id, nickname, "text", content=text)
@@ -184,7 +184,7 @@ def handle_mark_read(data):
     room = db.get_room(room_id)
     if not room:
         return
-    if room["type"] == "direct" and not db.is_direct_participant(room_id, nickname):
+    if not db.can_access_room(room, nickname):
         return
 
     msg_ids = db.mark_messages_read(room_id, nickname, up_to_message_id)

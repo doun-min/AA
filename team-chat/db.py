@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     owner_nickname TEXT,
     created_by TEXT,
     created_at TEXT NOT NULL,
-    is_deletable INTEGER NOT NULL DEFAULT 1
+    is_deletable INTEGER NOT NULL DEFAULT 1,
+    is_private INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -150,6 +151,11 @@ def init_db():
         if "end_date" not in columns:
             cur.execute("ALTER TABLE schedules ADD COLUMN end_date TEXT")
             cur.execute("UPDATE schedules SET end_date = date WHERE end_date IS NULL")
+        cur.execute("PRAGMA table_info(rooms)")
+        columns = {row["name"] for row in cur.fetchall()}
+        if "is_private" not in columns:
+            # 기존에 이미 만들어진 방들은 지금처럼 공개(누구나 접근 가능)로 유지한다.
+            cur.execute("ALTER TABLE rooms ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
         cur.execute("SELECT id FROM rooms WHERE type='global' LIMIT 1")
         if cur.fetchone() is None:
             cur.execute(
@@ -180,25 +186,74 @@ def get_room_by_name(name):
         return dict(row) if row else None
 
 
-def list_group_rooms():
+def list_group_rooms_for(nickname):
+    """공개 방은 누구나, 비공개 방은 room_participants에 등록된 사람에게만 보인다."""
     with db_cursor() as cur:
         cur.execute(
-            "SELECT * FROM rooms WHERE type IN ('global','group') "
-            "ORDER BY (type='global') DESC, created_at ASC"
+            """
+            SELECT * FROM rooms
+            WHERE type IN ('global','group')
+              AND (is_private = 0 OR id IN (
+                  SELECT room_id FROM room_participants WHERE nickname = ?
+              ))
+            ORDER BY (type='global') DESC, created_at ASC
+            """,
+            (nickname,),
         )
         return [dict(r) for r in cur.fetchall()]
 
 
-def create_group_room(name, creator):
+def create_group_room(name, creator, members=None):
+    """새로 만드는 그룹방은 항상 비공개(멤버제)다 — 만든 사람 + 지정한 멤버만 볼 수 있다."""
+    now = _now()
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO rooms (name, type, owner_nickname, created_by, created_at, is_deletable) "
-            "VALUES (?,?,?,?,?,1)",
-            (name, "group", creator, creator, _now()),
+            "INSERT INTO rooms (name, type, owner_nickname, created_by, created_at, is_deletable, is_private) "
+            "VALUES (?,?,?,?,?,1,1)",
+            (name, "group", creator, creator, now),
         )
         room_id = cur.lastrowid
+        participants = {creator, *(members or [])}
+        cur.executemany(
+            "INSERT OR IGNORE INTO room_participants (room_id, nickname, joined_at) VALUES (?,?,?)",
+            [(room_id, n, now) for n in participants],
+        )
         cur.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
         return dict(cur.fetchone())
+
+
+def is_room_participant(room_id, nickname):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM room_participants WHERE room_id=? AND nickname=?",
+            (room_id, nickname),
+        )
+        return cur.fetchone() is not None
+
+
+def can_access_room(room, nickname):
+    """direct 방은 참가자만, 비공개 그룹방은 멤버만, 그 외(공개 그룹/전체)는 누구나."""
+    if room["type"] == "direct":
+        return is_direct_participant(room["id"], nickname)
+    if room["is_private"]:
+        return is_room_participant(room["id"], nickname)
+    return True
+
+
+def add_room_member(room_id, nickname):
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT OR IGNORE INTO room_participants (room_id, nickname, joined_at) VALUES (?,?,?)",
+            (room_id, nickname, _now()),
+        )
+
+
+def remove_room_member(room_id, nickname):
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM room_participants WHERE room_id=? AND nickname=?",
+            (room_id, nickname),
+        )
 
 
 def delete_room(room_id):
