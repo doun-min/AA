@@ -148,6 +148,9 @@ def handle_send_message(data):
     if config.MENTION_ALL in mentioned_names:
         mentioned_names.discard(config.MENTION_ALL)
         mentioned_names |= set(db.get_room_member_nicknames(room_id, room["type"])) - {nickname}
+    # 방에 접근 권한이 없는 사람(예: 비공개 방 비멤버)은 멘션 대상에서 제외한다.
+    # 안 그러면 방 이름/메시지 내용이 담긴 알림이 그 사람에게 그대로 새어나간다.
+    mentioned_names = {n for n in mentioned_names if db.can_access_room(room, n)}
     if mentioned_names:
         db.add_mentions(msg["id"], room_id, mentioned_names)
     for name in mentioned_names:
