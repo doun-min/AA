@@ -35,11 +35,14 @@ def emit_room_badge_counts(nickname):
     if not sids:
         return
     # 방 목록 배지(rooms.html)는 그룹/전체 방은 멘션 카운트, 1:1 방은 안 읽은
-    # 메시지 카운트를 쓴다. 사이드바의 총합 배지(total)는 여기서 direct 카운트를
-    # 섞으면 뜻이 흐려지므로 지금처럼 멘션 총합만 유지한다(OS 알림도 멘션 기준 그대로).
+    # 메시지 카운트를 쓴다. 사이드바 총합 배지(total)도 두 카운트를 합산해서
+    # "채팅" 메뉴만 봐도 안 읽은 멘션/1:1 메시지가 있는지 알 수 있게 한다.
+    # (OS 알림(Notification)은 이 total과 무관하게 멘션 기준 그대로.)
     mention_counts = db.get_unread_mention_counts(nickname)
-    room_counts = {**mention_counts, **db.get_unread_direct_message_counts(nickname)}
-    payload = {"total": sum(mention_counts.values()), "rooms": room_counts}
+    direct_counts = db.get_unread_direct_message_counts(nickname)
+    room_counts = {**mention_counts, **direct_counts}
+    total = sum(mention_counts.values()) + sum(direct_counts.values())
+    payload = {"total": total, "rooms": room_counts}
     for sid in sids:
         emit("mention_count_update", payload, room=sid)
 

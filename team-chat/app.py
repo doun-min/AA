@@ -36,7 +36,11 @@ def create_app():
         nickname = session.get("nickname")
         if not nickname:
             return {}
-        return {"sidebar_mention_total": sum(db.get_unread_mention_counts(nickname).values())}
+        total = (
+            sum(db.get_unread_mention_counts(nickname).values())
+            + sum(db.get_unread_direct_message_counts(nickname).values())
+        )
+        return {"sidebar_mention_total": total}
 
     socketio.init_app(app, async_mode="threading")
 
