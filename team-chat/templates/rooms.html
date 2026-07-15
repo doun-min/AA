@@ -16,7 +16,10 @@
       <input type="text" id="new-room-name" placeholder="새 방 이름" maxlength="50" required>
       <button type="submit">방 만들기</button>
     </form>
-    <div class="member-picker">
+    <label class="member-picker-item">
+      <input type="checkbox" id="new-room-private"> 🔒 비공개 방으로 만들기 (지정한 멤버만 볼 수 있음)
+    </label>
+    <div class="member-picker" id="new-room-members" hidden>
       <p class="hint">초대할 인원 선택 (접속 중인 사용자만 선택 가능, 안 골라도 방은 만들어집니다)</p>
       {% for user in active_users %}
       <label class="member-picker-item">

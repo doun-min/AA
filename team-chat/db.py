@@ -203,21 +203,23 @@ def list_group_rooms_for(nickname):
         return [dict(r) for r in cur.fetchall()]
 
 
-def create_group_room(name, creator, members=None):
-    """새로 만드는 그룹방은 항상 비공개(멤버제)다 — 만든 사람 + 지정한 멤버만 볼 수 있다."""
+def create_group_room(name, creator, members=None, is_private=False):
+    """비공개(멤버제) 방은 만든 사람 + 지정한 멤버만 볼 수 있다. 공개 방은 예전처럼
+    누구나 볼 수 있고, 참여자는 각자 방을 방문할 때 자연스럽게 등록된다."""
     now = _now()
     with db_cursor(commit=True) as cur:
         cur.execute(
             "INSERT INTO rooms (name, type, owner_nickname, created_by, created_at, is_deletable, is_private) "
-            "VALUES (?,?,?,?,?,1,1)",
-            (name, "group", creator, creator, now),
+            "VALUES (?,?,?,?,?,1,?)",
+            (name, "group", creator, creator, now, 1 if is_private else 0),
         )
         room_id = cur.lastrowid
-        participants = {creator, *(members or [])}
-        cur.executemany(
-            "INSERT OR IGNORE INTO room_participants (room_id, nickname, joined_at) VALUES (?,?,?)",
-            [(room_id, n, now) for n in participants],
-        )
+        if is_private:
+            participants = {creator, *(members or [])}
+            cur.executemany(
+                "INSERT OR IGNORE INTO room_participants (room_id, nickname, joined_at) VALUES (?,?,?)",
+                [(room_id, n, now) for n in participants],
+            )
         cur.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
         return dict(cur.fetchone())
 

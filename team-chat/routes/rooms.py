@@ -25,13 +25,16 @@ def create_room():
     if len(name) > config.ROOM_NAME_MAX_LENGTH:
         return jsonify(error=f"방 이름은 {config.ROOM_NAME_MAX_LENGTH}자 이하로 입력해주세요."), 400
 
-    members = {m.strip() for m in (body.get("members") or []) if isinstance(m, str) and m.strip()}
-    members.discard(nickname)
-    invalid = [m for m in members if not auth.is_active(m)]
-    if invalid:
-        return jsonify(error=f"현재 접속 중이 아닌 사용자는 초대할 수 없습니다: {', '.join(invalid)}"), 400
+    is_private = bool(body.get("is_private"))
+    members = set()
+    if is_private:
+        members = {m.strip() for m in (body.get("members") or []) if isinstance(m, str) and m.strip()}
+        members.discard(nickname)
+        invalid = [m for m in members if not auth.is_active(m)]
+        if invalid:
+            return jsonify(error=f"현재 접속 중이 아닌 사용자는 초대할 수 없습니다: {', '.join(invalid)}"), 400
 
-    room = db.create_group_room(name, nickname, members)
+    room = db.create_group_room(name, nickname, members, is_private=is_private)
     for member in members:
         _notify_member(member, "room_member_added", {"room_id": room["id"], "room_name": room["name"]})
     return jsonify(room=room), 201
