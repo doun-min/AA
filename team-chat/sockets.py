@@ -30,6 +30,11 @@ def _cancel_pending_release(nickname):
             timer.cancel()
 
 
+def broadcast_active_users():
+    """접속 중인 사용자 목록이 바뀔 때마다 모든 클라이언트에게 최신 목록을 push한다."""
+    socketio.emit("active_users_update", {"users": auth.list_active()})
+
+
 def emit_room_badge_counts(nickname):
     sids = nickname_to_sids.get(nickname)
     if not sids:
@@ -55,6 +60,7 @@ def _schedule_release(nickname):
             auth.release_nickname(nickname)
             for members in room_members.values():
                 members.discard(nickname)
+            broadcast_active_users()
 
     with _timer_lock:
         old = _release_timers.get(nickname)

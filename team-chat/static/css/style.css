@@ -119,17 +119,6 @@ body {
 }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 .panel-header h2 { margin: 0 0 12px; font-size: 16px; }
-.inline-form { display: flex; gap: 8px; margin-bottom: 8px; }
-.inline-form input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
-.inline-form button {
-  padding: 8px 14px; border: none; border-radius: 8px; background: var(--primary);
-  color: var(--primary-text); font-weight: 600; cursor: pointer;
-}
-
-.member-picker { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px; }
-.member-picker .hint { flex-basis: 100%; margin-bottom: 2px; }
-.member-picker-item { display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
-
 .room-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .room-item {
   display: flex; align-items: center; justify-content: space-between;
@@ -420,8 +409,29 @@ button { font-family: inherit; }
 .image-modal-body img { max-width: 100%; max-height: 70vh; border-radius: 8px; display: block; }
 
 /* members modal */
-.member-invite-row { display: flex; gap: 8px; margin-top: 8px; }
+.member-invite-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 .member-invite-row select { flex: 1; }
+
+/* toggle switch (room visibility) */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+.switch input {
+  position: absolute; inset: 0; margin: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 1;
+}
+.switch-track {
+  position: absolute; inset: 0; background: var(--border); border-radius: 999px; transition: background 0.2s ease;
+}
+.switch-track::before {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  background: var(--surface); border-radius: 50%; transition: transform 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.switch input:checked + .switch-track { background: var(--primary); }
+.switch input:checked + .switch-track::before { transform: translateX(18px); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.room-visibility-row { display: flex; align-items: center; gap: 10px; }
+.room-visibility-icon { font-size: 18px; width: 22px; text-align: center; }
+.room-visibility-label { font-size: 13px; color: var(--text-muted); font-weight: 600; }
 
 @media (max-width: 720px) {
   .issue-table th, .issue-table td { max-width: 160px; }

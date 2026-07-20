@@ -40,6 +40,10 @@ def login_page():
     session.clear()
     session["nickname"] = nickname
     session.permanent = True
+
+    from sockets import broadcast_active_users
+
+    broadcast_active_users()
     return redirect(url_for("pages.rooms_page"))
 
 
@@ -48,6 +52,10 @@ def logout():
     nickname = session.get("nickname")
     if nickname:
         auth.release_nickname(nickname)
+
+        from sockets import broadcast_active_users
+
+        broadcast_active_users()
     session.clear()
     return redirect(url_for("pages.login_page"))
 

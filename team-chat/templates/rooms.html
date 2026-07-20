@@ -12,24 +12,8 @@
 <div class="layout">
   <section class="panel">
     <div class="panel-header"><h2>채팅방</h2></div>
-    <form id="create-room-form" class="inline-form">
-      <input type="text" id="new-room-name" placeholder="새 방 이름" maxlength="50" required>
-      <button type="submit">방 만들기</button>
-    </form>
-    <label class="member-picker-item">
-      <input type="checkbox" id="new-room-private"> 🔒 비공개 방으로 만들기 (지정한 멤버만 볼 수 있음)
-    </label>
-    <div class="member-picker" id="new-room-members" hidden>
-      <p class="hint">초대할 인원 선택 (접속 중인 사용자만 선택 가능, 안 골라도 방은 만들어집니다)</p>
-      {% for user in active_users %}
-      <label class="member-picker-item">
-        <input type="checkbox" class="new-room-member" value="{{ user }}"> {{ user }}
-      </label>
-      {% endfor %}
-      {% if not active_users %}<p class="hint">현재 접속 중인 다른 사용자가 없습니다.</p>{% endif %}
-    </div>
-    <p id="room-error" class="error"></p>
-    <ul class="room-list">
+    <button type="button" id="btn-open-create-room" class="btn-secondary">+ 방 만들기</button>
+    <ul class="room-list" id="group-room-list">
       {% for room in group_rooms %}
       <li class="room-item">
         <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
@@ -66,7 +50,7 @@
 
   <section class="panel">
     <div class="panel-header"><h2>접속 중인 사용자</h2></div>
-    <ul class="room-list">
+    <ul class="room-list" id="active-users-list">
       {% for user in active_users %}
       <li class="room-item">
         <span class="room-name">{{ user }}</span>
@@ -76,6 +60,47 @@
       {% if not active_users %}<li class="empty">다른 접속자가 없습니다.</li>{% endif %}
     </ul>
   </section>
+</div>
+
+<div id="create-room-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>방 만들기</h2>
+      <button type="button" class="modal-close" id="create-room-modal-close">&times;</button>
+    </div>
+    <form id="create-room-form" class="modal-body">
+      <label>
+        방 이름
+        <input type="text" id="new-room-name" placeholder="새 방 이름" maxlength="50" required>
+      </label>
+
+      <div class="room-visibility-row">
+        <span class="room-visibility-icon" id="room-visibility-icon">🔓</span>
+        <label class="switch">
+          <input type="checkbox" id="new-room-private">
+          <span class="switch-track"></span>
+        </label>
+        <span class="room-visibility-label" id="room-visibility-label">공개 방</span>
+      </div>
+
+      <div class="member-invite-row" id="new-room-invite-row" hidden>
+        <select id="new-room-member-select">
+          <option value="">초대할 사용자 선택</option>
+          {% for user in active_users %}<option value="{{ user }}">{{ user }}</option>{% endfor %}
+        </select>
+        <button type="button" id="btn-add-room-member" class="btn-secondary">추가</button>
+      </div>
+      <p class="hint" id="new-room-no-users-hint" {% if active_users %}hidden{% endif %}>현재 접속 중인 다른 사용자가 없습니다.</p>
+      <ul class="room-list" id="new-room-member-list" hidden></ul>
+
+      <p id="room-error" class="error"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn-ghost" id="create-room-cancel">취소</button>
+        <button type="submit" class="btn-secondary">방 만들기</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script src="{{ url_for('static', filename='js/rooms.js') }}"></script>
