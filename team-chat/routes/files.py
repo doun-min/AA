@@ -2,7 +2,6 @@ import os
 import uuid
 
 from flask import Blueprint, abort, jsonify, request, send_from_directory, session
-from werkzeug.utils import secure_filename
 
 import config
 import db
@@ -41,8 +40,12 @@ def upload_file(room_id):
     if ext not in config.ALLOWED_EXTENSIONS:
         return jsonify(error="허용되지 않는 파일 형식입니다."), 400
 
-    safe_name = secure_filename(upload.filename) or f"file.{ext}"
-    stored_filename = f"{uuid.uuid4().hex}_{safe_name}"
+    # 원본 파일명은 표시용으로 DB에 그대로 저장하므로, 실제 디스크에 쓰는 이름은
+    # 굳이 원본 이름을 남길 필요 없이 무작위 식별자 + 검증된 확장자만 있으면 된다.
+    # secure_filename()은 한글 등 비ASCII 문자를 통째로 지워버려서, 그 결과를
+    # 그대로 쓰면 확장자 앞의 점(.)까지 같이 사라져(예: "xlsx"만 남음) 다운로드한
+    # 파일이 확장자 없는 파일이 되고 Content-Type도 잘못 내려가는 문제가 있었다.
+    stored_filename = f"{uuid.uuid4().hex}.{ext}"
     room_dir = os.path.join(config.UPLOAD_FOLDER, str(room_id))
     os.makedirs(room_dir, exist_ok=True)
     upload.save(os.path.join(room_dir, stored_filename))
