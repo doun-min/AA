@@ -80,6 +80,11 @@ def handle_connect():
     _cancel_pending_release(nickname)
     sid_to_nickname[request.sid] = nickname
     nickname_to_sids.setdefault(nickname, set()).add(request.sid)
+    # 트레이 최소화/절전/네트워크 순단 등으로 소켓이 끊겨 release된 뒤 재연결되는
+    # 경우, 재로그인 없이도 active 상태로 복구되도록 한다. 이미 active였다면
+    # (정상적인 최초 연결) 여기선 아무 변화가 없으므로 다시 브로드캐스트하지 않는다.
+    if auth.mark_active(nickname):
+        broadcast_active_users()
 
 
 @socketio.on("disconnect")

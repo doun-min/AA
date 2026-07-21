@@ -101,6 +101,9 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      // 트레이로 숨겨져 있어도 타이머/작업이 스로틀링되지 않게 해서, socket.io의
+      // ping-pong 응답이 늦어져 서버가 연결을 끊어버리는 일이 없도록 한다.
+      backgroundThrottling: false,
     },
   });
 
