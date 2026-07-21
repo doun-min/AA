@@ -128,6 +128,10 @@ def chat_page(room_id):
     # 비공개 방 초대 후보: 현재 접속 중이면서 아직 멤버가 아닌 사용자
     invitable_users = [u for u in active_users if u not in room_members]
 
+    message_ids = [m["id"] for m in messages if m["type"] != "system"]
+    reaction_counts = db.get_message_reaction_counts(message_ids)
+    my_reactions = db.get_message_reactions_by_user(message_ids, nickname)
+
     today_schedules = db.list_schedules_for_date(db.today_kst().isoformat())
     schedule_banner = format_banner(today_schedules)
 
@@ -144,4 +148,6 @@ def chat_page(room_id):
         room_members=room_members,
         invitable_users=invitable_users,
         schedule_banner=schedule_banner,
+        reaction_counts=reaction_counts,
+        my_reactions=my_reactions,
     )

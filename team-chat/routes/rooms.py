@@ -182,3 +182,32 @@ def start_direct_room():
 def active_users():
     nickname = _require_login()
     return jsonify(users=[u for u in auth.list_active() if u != nickname])
+
+
+@rooms_bp.route("/messages/<int:message_id>/reactions", methods=["POST"])
+def toggle_message_reaction(message_id):
+    nickname = _require_login()
+    body = request.get_json(silent=True) or {}
+    reaction = body.get("reaction")
+    if reaction not in db.REACTION_TYPES:
+        return jsonify(error="올바르지 않은 반응입니다."), 400
+
+    msg = db.get_message(message_id)
+    if not msg or msg["type"] == "system":
+        abort(404)
+    room = db.get_room(msg["room_id"])
+    if not room or not db.can_access_room(room, nickname):
+        abort(403)
+
+    added = db.toggle_message_reaction(message_id, nickname, reaction)
+    counts = db.get_message_reaction_counts([message_id]).get(message_id, {})
+    payload = {
+        "message_id": message_id,
+        "room_id": msg["room_id"],
+        "reaction": reaction,
+        "nickname": nickname,
+        "added": added,
+        "counts": counts,
+    }
+    socketio.emit("reaction_update", payload, room=str(msg["room_id"]))
+    return jsonify(added=added, counts=counts)

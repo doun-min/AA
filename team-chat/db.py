@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS message_reactions (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    nickname TEXT NOT NULL,
+    reaction TEXT NOT NULL CHECK(reaction IN ('o','x','like','dislike','check')),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, nickname, reaction)
+);
+
 CREATE TABLE IF NOT EXISTS direct_participants (
     room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     nickname TEXT NOT NULL,
@@ -124,6 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room_id);
 CREATE INDEX IF NOT EXISTS idx_direct_nickname ON direct_participants(nickname);
 CREATE INDEX IF NOT EXISTS idx_room_participants_room ON room_participants(room_id);
 CREATE INDEX IF NOT EXISTS idx_message_reads_message ON message_reads(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_message ON message_reactions(message_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(date);
 CREATE INDEX IF NOT EXISTS idx_schedules_nickname ON schedules(nickname);
 CREATE INDEX IF NOT EXISTS idx_mentions_target ON mentions(target_nickname, read_at);
@@ -425,6 +434,70 @@ def list_messages_with_unread(room_id, limit=200):
     for m in messages:
         m["unread_count"] = counts.get(m["id"], 0)
     return messages
+
+
+REACTION_TYPES = ("o", "x", "like", "dislike", "check")
+
+
+def get_message(message_id):
+    with db_cursor() as cur:
+        cur.execute("SELECT * FROM messages WHERE id=?", (message_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def toggle_message_reaction(message_id, nickname, reaction):
+    """이미 남긴 반응이면 취소(삭제), 아니면 추가한다. 반환값: 추가됐으면 True."""
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "SELECT 1 FROM message_reactions WHERE message_id=? AND nickname=? AND reaction=?",
+            (message_id, nickname, reaction),
+        )
+        if cur.fetchone():
+            cur.execute(
+                "DELETE FROM message_reactions WHERE message_id=? AND nickname=? AND reaction=?",
+                (message_id, nickname, reaction),
+            )
+            return False
+        cur.execute(
+            "INSERT INTO message_reactions (message_id, nickname, reaction, created_at) VALUES (?,?,?,?)",
+            (message_id, nickname, reaction, _now()),
+        )
+        return True
+
+
+def get_message_reaction_counts(message_ids):
+    """{message_id: {reaction: count}} 형태로 반환한다."""
+    if not message_ids:
+        return {}
+    placeholders = ",".join("?" for _ in message_ids)
+    with db_cursor() as cur:
+        cur.execute(
+            f"SELECT message_id, reaction, COUNT(*) AS c FROM message_reactions "
+            f"WHERE message_id IN ({placeholders}) GROUP BY message_id, reaction",
+            message_ids,
+        )
+        result = {}
+        for r in cur.fetchall():
+            result.setdefault(r["message_id"], {})[r["reaction"]] = r["c"]
+        return result
+
+
+def get_message_reactions_by_user(message_ids, nickname):
+    """{message_id: [reaction, ...]} 형태로, nickname 본인이 남긴 반응만 반환한다."""
+    if not message_ids:
+        return {}
+    placeholders = ",".join("?" for _ in message_ids)
+    with db_cursor() as cur:
+        cur.execute(
+            f"SELECT message_id, reaction FROM message_reactions "
+            f"WHERE message_id IN ({placeholders}) AND nickname=?",
+            message_ids + [nickname],
+        )
+        result = {}
+        for r in cur.fetchall():
+            result.setdefault(r["message_id"], []).append(r["reaction"])
+        return result
 
 
 def create_schedule(nickname, category, title, date, end_date=None, start_time=None, end_time=None):

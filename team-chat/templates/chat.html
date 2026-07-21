@@ -28,7 +28,8 @@
 
   <div id="messages" class="messages">
     {% for m in messages %}
-      <div class="message {{ 'me' if m.sender == nickname else '' }} type-{{ m.type }}" data-msg-id="{{ m.id }}">
+      <div class="message {{ 'me' if m.sender == nickname else '' }} type-{{ m.type }}" data-msg-id="{{ m.id }}"
+           {% if m.type != 'system' %}data-reactions='{{ reaction_counts.get(m.id, {})|tojson }}' data-my-reactions='{{ my_reactions.get(m.id, [])|tojson }}'{% endif %}>
         {% if m.type == 'system' %}
           <div class="system-text">{{ m.content }}</div>
         {% else %}
@@ -36,6 +37,7 @@
             <span class="msg-sender">{{ m.sender }}</span>
             {% if m.unread_count %}<span class="msg-unread" data-msg-id="{{ m.id }}">{{ m.unread_count }}</span>{% else %}<span class="msg-unread" data-msg-id="{{ m.id }}" hidden></span>{% endif %}
             <span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span>
+            <button type="button" class="msg-react-btn" data-msg-id="{{ m.id }}" title="반응 남기기">🙂+</button>
           </div>
           {% if m.type == 'text' %}
             <div class="msg-body">{{ m.content }}</div>
@@ -44,6 +46,7 @@
           {% else %}
             <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" download="{{ m.original_filename }}">📎 {{ m.original_filename }}</a></div>
           {% endif %}
+          <div class="msg-reactions"></div>
         {% endif %}
       </div>
     {% endfor %}
@@ -63,6 +66,14 @@
 </div>
 
 <div id="toast-container" class="toast-container"></div>
+
+<div id="reaction-picker" class="reaction-picker" hidden>
+  <button type="button" data-reaction="o" title="O">⭕</button>
+  <button type="button" data-reaction="x" title="X">❌</button>
+  <button type="button" data-reaction="like" title="좋아요">👍</button>
+  <button type="button" data-reaction="dislike" title="싫어요">👎</button>
+  <button type="button" data-reaction="check" title="체크">✅</button>
+</div>
 
 <div id="image-modal" class="modal-overlay" hidden>
   <div class="modal image-modal">

@@ -122,8 +122,10 @@
       div.innerHTML =
         `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span>` +
         `<span class="msg-unread" data-msg-id="${msg.id}"${unreadAttr}>${unreadCount}</span>` +
-        `<span class="msg-time">${time}</span></div>` +
-        body;
+        `<span class="msg-time">${time}</span>` +
+        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기">🙂+</button></div>` +
+        body +
+        `<div class="msg-reactions"></div>`;
     }
     messagesEl.appendChild(div);
     scrollToBottom();
@@ -140,6 +142,135 @@
       badge.textContent = "";
     }
   }
+
+  // ---- 메시지 반응(O/X/좋아요/싫어요/체크) ----
+  const REACTIONS = [
+    { key: "o", icon: "⭕" },
+    { key: "x", icon: "❌" },
+    { key: "like", icon: "👍" },
+    { key: "dislike", icon: "👎" },
+    { key: "check", icon: "✅" },
+  ];
+  // msgId(문자열) -> 내가 이미 남긴 반응 종류의 Set. 반응 종류별로 한 번씩만
+  // 남길 수 있으므로(토글), 서버 응답이 아니라 이 클라이언트 상태로 pill의
+  // "내가 남긴 반응" 표시 여부를 판단한다.
+  const myReactions = new Map();
+
+  function getMyReactionSet(msgId) {
+    const key = String(msgId);
+    if (!myReactions.has(key)) myReactions.set(key, new Set());
+    return myReactions.get(key);
+  }
+
+  function renderReactions(msgDiv, counts) {
+    const row = msgDiv.querySelector(".msg-reactions");
+    if (!row) return;
+    const msgId = msgDiv.dataset.msgId;
+    const mine = getMyReactionSet(msgId);
+    row.innerHTML = "";
+    REACTIONS.forEach(({ key, icon }) => {
+      const count = (counts || {})[key] || 0;
+      if (count <= 0) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "reaction-pill" + (mine.has(key) ? " mine" : "");
+      btn.dataset.reaction = key;
+      btn.dataset.msgId = msgId;
+      btn.textContent = `${icon} ${count}`;
+      row.appendChild(btn);
+    });
+  }
+
+  // 서버 렌더링(SSR)된 메시지들의 초기 반응 상태를 화면에 반영한다.
+  messagesEl.querySelectorAll(".message[data-reactions]").forEach((msgDiv) => {
+    let counts = {};
+    let mine = [];
+    try {
+      counts = JSON.parse(msgDiv.dataset.reactions || "{}");
+      mine = JSON.parse(msgDiv.dataset.myReactions || "[]");
+    } catch (e) {
+      counts = {};
+      mine = [];
+    }
+    mine.forEach((key) => getMyReactionSet(msgDiv.dataset.msgId).add(key));
+    renderReactions(msgDiv, counts);
+  });
+
+  async function toggleReaction(msgId, reaction) {
+    try {
+      const res = await fetch(`/api/messages/${msgId}/reactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reaction }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "반응을 남기지 못했습니다.");
+      }
+      // 실제 카운트/내 반응 상태 갱신은 reaction_update 소켓 이벤트로 처리한다.
+    } catch (err) {
+      alert("반응을 남기는 중 오류가 발생했습니다.");
+    }
+  }
+
+  const reactionPicker = document.getElementById("reaction-picker");
+  let pickerTargetMsgId = null;
+
+  function openReactionPicker(anchorEl, msgId) {
+    pickerTargetMsgId = msgId;
+    const rect = anchorEl.getBoundingClientRect();
+    reactionPicker.hidden = false;
+    const pickerWidth = reactionPicker.offsetWidth || 220;
+    const left = Math.min(Math.max(rect.left, 4), window.innerWidth - pickerWidth - 4);
+    const top = rect.top - reactionPicker.offsetHeight - 8;
+    reactionPicker.style.left = `${left}px`;
+    reactionPicker.style.top = `${Math.max(top, 4)}px`;
+  }
+
+  function closeReactionPicker() {
+    reactionPicker.hidden = true;
+    pickerTargetMsgId = null;
+  }
+
+  messagesEl.addEventListener("click", (e) => {
+    const pill = e.target.closest(".reaction-pill");
+    if (pill) {
+      toggleReaction(pill.dataset.msgId, pill.dataset.reaction);
+      return;
+    }
+    const reactBtn = e.target.closest(".msg-react-btn");
+    if (reactBtn) {
+      openReactionPicker(reactBtn, reactBtn.dataset.msgId);
+    }
+  });
+
+  reactionPicker.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-reaction]");
+    if (!btn || !pickerTargetMsgId) return;
+    toggleReaction(pickerTargetMsgId, btn.dataset.reaction);
+    closeReactionPicker();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (reactionPicker.hidden) return;
+    if (reactionPicker.contains(e.target) || e.target.closest(".msg-react-btn")) return;
+    closeReactionPicker();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !reactionPicker.hidden) closeReactionPicker();
+  });
+
+  socket.on("reaction_update", (data) => {
+    if (Number(data.room_id) !== Number(roomId)) return;
+    const msgDiv = messagesEl.querySelector(`.message[data-msg-id="${data.message_id}"]`);
+    if (!msgDiv) return;
+    if (data.nickname === nickname) {
+      const mine = getMyReactionSet(data.message_id);
+      if (data.added) mine.add(data.reaction);
+      else mine.delete(data.reaction);
+    }
+    renderReactions(msgDiv, data.counts);
+  });
 
   socket.on("new_message", (msg) => {
     if (Number(msg.room_id) !== Number(roomId)) return;

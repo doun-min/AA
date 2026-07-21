@@ -158,6 +158,34 @@ button { font-family: inherit; }
 .msg-body { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; word-break: break-word; }
 .message.me .msg-body { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 .msg-image { max-width: 260px; border-radius: 8px; display: block; cursor: pointer; }
+
+.msg-react-btn {
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+  font-size: 11px; padding: 0 2px; border-radius: 4px; opacity: 0.6;
+}
+.msg-react-btn:hover { opacity: 1; background: var(--border); }
+
+.msg-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.msg-reactions:empty { display: none; }
+.reaction-pill {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 12px; cursor: pointer; line-height: 1.6;
+}
+.reaction-pill:hover { border-color: var(--primary); }
+.reaction-pill.mine { background: var(--mention-bg); border-color: var(--primary); font-weight: 700; }
+
+.reaction-picker {
+  position: fixed; z-index: 500; display: flex; gap: 4px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.reaction-picker[hidden] { display: none; }
+.reaction-picker button {
+  border: none; background: transparent; cursor: pointer; font-size: 18px;
+  padding: 4px; border-radius: 50%; line-height: 1;
+}
+.reaction-picker button:hover { background: var(--bg); }
 .mention {
   background: var(--mention-highlight-bg); color: var(--mention-highlight-text);
   border-radius: 4px; padding: 0 4px; font-weight: 700;
