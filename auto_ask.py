@@ -1,6 +1,8 @@
 import re
 import json
 from datetime import datetime
+
+import pandas as pd
 from playwright.sync_api import Playwright, sync_playwright
 
 questions = [
@@ -66,3 +68,8 @@ with sync_playwright() as playwright:
 
 with open("results.json", "w", encoding="utf-8") as f:
     json.dump(results, f, ensure_ascii=False, indent=2)
+
+df = pd.DataFrame(results)[["question", "answer"]].rename(
+    columns={"question": "질문", "answer": "답변"}
+)
+df.to_excel("results.xlsx", index=False, engine="openpyxl")
