@@ -39,8 +39,11 @@ def reset_chat(page) -> None:
 
 
 def run(playwright: Playwright) -> None:
-    browser = playwright.chromium.launch(channel="chrome", headless=False)
-    context = browser.new_context()
+    context = playwright.chromium.launch_persistent_context(
+        user_data_dir="C:\\automation-profile",
+        channel="chrome",
+        headless=False,
+    )
     page = context.new_page()
     page.goto("https://www.samsung.com/uk/")
     page.get_by_role("button", name="Open chat").click()
@@ -58,7 +61,6 @@ def run(playwright: Playwright) -> None:
             reset_chat(page)
 
     context.close()
-    browser.close()
 
 
 with sync_playwright() as playwright:
