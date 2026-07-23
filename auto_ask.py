@@ -28,14 +28,12 @@ def reset_chat(page) -> None:
     """채팅 닫고 다시 열어서 새 대화로 초기화"""
     page.get_by_role("button", name="Options").click()
     page.get_by_role("button", name="Close Chat Close Chat").click()
-
-    # TODO: 아래 3줄은 특정 상황에서만 뜨는 팝업일 수 있음.
-    # 실행해보고 안 뜨면 하나씩 지우면 됨
     page.get_by_role("button", name="Close").nth(2).click()
     page.get_by_role("button").filter(has_text=re.compile(r"^$")).nth(5).click()
-    page.get_by_role("button", name="Cancel").click()
-
     page.get_by_role("button", name="Open chat").click()
+    page.get_by_role("button", name="Cancel").click()
+    page.get_by_role("button", name="Options").click()
+    page.get_by_role("button", name="New Chat New Chat").click()
 
 
 def run(playwright: Playwright) -> None:
