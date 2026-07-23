@@ -346,6 +346,16 @@ def add_message(room_id, sender, type_, content=None, file_path=None, original_f
         return {"id": msg_id, "created_at": created_at}
 
 
+def get_original_filename(room_id, file_path):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT original_filename FROM messages WHERE room_id=? AND file_path=?",
+            (room_id, file_path),
+        )
+        row = cur.fetchone()
+        return row["original_filename"] if row else None
+
+
 def list_messages(room_id, limit=200):
     with db_cursor() as cur:
         if limit:

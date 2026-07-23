@@ -90,4 +90,11 @@ def get_file(room_id, filename):
         abort(401)
     _check_room_access(room_id, nickname)
     room_dir = os.path.join(config.UPLOAD_FOLDER, str(room_id))
-    return send_from_directory(room_dir, filename)
+    # send_from_directory()가 기본으로 내려주는 Content-Disposition은 디스크에 저장된
+    # 이름(uuid.ext)을 filename으로 쓰는데, 브라우저는 <a download="원본이름"> 속성보다
+    # 이 헤더를 우선시해서 결국 uuid 파일명으로 저장돼버린다. 그래서 DB에 저장해둔
+    # 원본 파일명을 명시적으로 넘겨줘야 한다.
+    original_filename = db.get_original_filename(room_id, filename)
+    return send_from_directory(
+        room_dir, filename, as_attachment=True, download_name=original_filename or filename
+    )

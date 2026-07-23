@@ -408,23 +408,39 @@
   input.addEventListener("click", updateMentionSuggest);
   input.addEventListener("blur", () => setTimeout(closeMentionSuggest, 100));
 
+  function autoResizeInput() {
+    input.style.height = "auto";
+    input.style.height = input.scrollHeight + "px";
+  }
+  input.addEventListener("input", autoResizeInput);
+
   input.addEventListener("keydown", (e) => {
-    if (mentionSuggest.hidden) return;
-    const items = mentionSuggest.querySelectorAll("li");
-    if (!items.length) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveItem(items, (mentionActiveIndex + 1) % items.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveItem(items, (mentionActiveIndex - 1 + items.length) % items.length);
-    } else if (e.key === "Enter" || e.key === "Tab") {
-      if (mentionActiveIndex >= 0) {
-        e.preventDefault();
-        selectMention(items[mentionActiveIndex].dataset.name);
+    if (!mentionSuggest.hidden) {
+      const items = mentionSuggest.querySelectorAll("li");
+      if (items.length) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setActiveItem(items, (mentionActiveIndex + 1) % items.length);
+          return;
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setActiveItem(items, (mentionActiveIndex - 1 + items.length) % items.length);
+          return;
+        } else if (e.key === "Enter" || e.key === "Tab") {
+          if (mentionActiveIndex >= 0) {
+            e.preventDefault();
+            selectMention(items[mentionActiveIndex].dataset.name);
+            return;
+          }
+        } else if (e.key === "Escape") {
+          closeMentionSuggest();
+          return;
+        }
       }
-    } else if (e.key === "Escape") {
-      closeMentionSuggest();
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
     }
   });
 
@@ -434,6 +450,7 @@
     if (!text) return;
     socket.emit("send_message", { room_id: Number(roomId), text });
     input.value = "";
+    autoResizeInput();
     closeMentionSuggest();
   });
 
