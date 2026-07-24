@@ -36,10 +36,10 @@ def ask_and_get_answer(page, question: str) -> str:
     page.get_by_role("textbox", name="Ask me anything").fill(question)
     page.get_by_role("button", name="Send message").click()
 
-    # TODO: 임시 고정 대기 -> 로딩 인디케이터 셀렉터로 교체 권장
-    page.wait_for_timeout(3000)
+    # 답변이 완료되면 피드백 툴팁(👍/👎 등)이 노출됨 -> 그걸 완료 신호로 사용
+    page.locator(".feedback-tolltip-wrapper").last.wait_for(state="visible", timeout=30000)
 
-    return page.locator("div.chatbot-main-cont").inner_text()
+    return page.locator("div.chatbot-main-cont").last.inner_text()
 
 
 def reset_chat(page) -> None:
@@ -63,7 +63,10 @@ def run(playwright: Playwright) -> None:
     page = context.new_page()
     page.goto("https://www.samsung.com/uk/")
     open_chat_if_needed(page)
-    reset_chat(page)  # 이전 실행에서 남은 대화 세션 초기화
+
+    # 피드백 툴팁이 이미 떠있으면 이전 실행에서 남은 대화 세션 -> 초기화
+    if page.locator(".feedback-tolltip-wrapper").count() > 0:
+        reset_chat(page)
 
     for i, q in enumerate(questions):
         answer = ask_and_get_answer(page, q)
