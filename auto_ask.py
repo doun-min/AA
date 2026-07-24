@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 from playwright.sync_api import Playwright, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 questions = [
     "I heard the Z Flip8 just came out, what are its key features?",
@@ -13,6 +14,15 @@ questions = [
 ]
 
 results = []
+
+
+def open_chat_if_needed(page) -> None:
+    """Open chat 버튼이 뜨면 클릭, 이미 챗봇 화면이 노출돼 있으면 그냥 넘어감"""
+    try:
+        page.get_by_role("button", name="Open chat").wait_for(state="visible", timeout=5000)
+        page.get_by_role("button", name="Open chat").click()
+    except PlaywrightTimeoutError:
+        pass
 
 
 def ask_and_get_answer(page, question: str) -> str:
@@ -32,7 +42,7 @@ def reset_chat(page) -> None:
     page.get_by_role("button", name="Close Chat Close Chat").click()
     page.get_by_role("button", name="Close").nth(2).click()
     page.get_by_role("button").filter(has_text=re.compile(r"^$")).nth(5).click()
-    page.get_by_role("button", name="Open chat").click()
+    open_chat_if_needed(page)
     page.get_by_role("button", name="Cancel").click()
     page.get_by_role("button", name="Options").click()
     page.get_by_role("button", name="New Chat New Chat").click()
@@ -46,7 +56,7 @@ def run(playwright: Playwright) -> None:
     )
     page = context.new_page()
     page.goto("https://www.samsung.com/uk/")
-    page.get_by_role("button", name="Open chat").click()
+    open_chat_if_needed(page)
 
     for i, q in enumerate(questions):
         answer = ask_and_get_answer(page, q)
@@ -72,4 +82,5 @@ with open("results.json", "w", encoding="utf-8") as f:
 df = pd.DataFrame(results)[["question", "answer"]].rename(
     columns={"question": "질문", "answer": "답변"}
 )
-df.to_excel("results.xlsx", index=False, engine="openpyxl")
+excel_filename = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+df.to_excel(excel_filename, index=False, engine="openpyxl")
