@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 
 import pandas as pd
+from openpyxl.styles import Alignment, Font, PatternFill
 from playwright.sync_api import Playwright, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
@@ -93,4 +94,22 @@ df = pd.DataFrame(results)[["question", "answer"]].rename(
     columns={"question": "질문", "answer": "답변"}
 )
 excel_filename = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-df.to_excel(excel_filename, index=False, engine="openpyxl")
+
+FONT = Font(name="맑은 고딕", size=9)
+WRAP = Alignment(wrap_text=True, vertical="top")
+HEADER_FILL = PatternFill(start_color="87CEEB", end_color="87CEEB", fill_type="solid")
+
+with pd.ExcelWriter(excel_filename, engine="openpyxl") as writer:
+    df.to_excel(writer, index=False, sheet_name="Sheet1")
+    worksheet = writer.sheets["Sheet1"]
+
+    worksheet.column_dimensions["A"].width = 70.7  # 약 500px
+    worksheet.column_dimensions["B"].width = 85.0  # 약 600px
+
+    for row in worksheet.iter_rows():
+        for cell in row:
+            cell.font = FONT
+            cell.alignment = WRAP
+
+    for cell in worksheet[1]:
+        cell.fill = HEADER_FILL
