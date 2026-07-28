@@ -1,6 +1,6 @@
 import re
-import json
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -13,6 +13,8 @@ questions = [
     "질문 3",
     "질문 4",
 ]
+
+OUTPUT_DIR = Path(r"\\내부IP주소\ict혁신그룹2팀_se통합검증")  # 실제 내부 IP로 교체
 
 results = []
 
@@ -87,13 +89,10 @@ def run(playwright: Playwright) -> None:
 with sync_playwright() as playwright:
     run(playwright)
 
-with open("results.json", "w", encoding="utf-8") as f:
-    json.dump(results, f, ensure_ascii=False, indent=2)
-
 df = pd.DataFrame(results)[["question", "answer"]].rename(
     columns={"question": "질문", "answer": "답변"}
 )
-excel_filename = f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+excel_filename = OUTPUT_DIR / f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
 FONT = Font(name="맑은 고딕", size=9)
 WRAP = Alignment(wrap_text=True, vertical="top")
