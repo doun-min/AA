@@ -57,6 +57,15 @@ def reset_chat(page) -> None:
     click_if_visible(page.get_by_role("button", name="New Chat New Chat"))
 
 
+def ensure_fresh_session(page, max_attempts: int = 3) -> None:
+    """이전 대화 흔적이 남아있으면 reset_chat을 반복 시도해서 확실히 새 세션으로 만듦"""
+    for attempt in range(max_attempts):
+        if page.locator(".feedback-tolltip-wrapper").count() == 0:
+            return
+        reset_chat(page)
+    raise RuntimeError("이전 세션 초기화에 반복적으로 실패했습니다.")
+
+
 def run(playwright: Playwright) -> None:
     context = playwright.chromium.launch_persistent_context(
         user_data_dir="C:\\automation-profile",
@@ -66,10 +75,7 @@ def run(playwright: Playwright) -> None:
     page = context.new_page()
     page.goto("https://www.samsung.com/uk/")
     open_chat_if_needed(page)
-
-    # 피드백 툴팁이 이미 떠있으면 이전 실행에서 남은 대화 세션 -> 초기화
-    if page.locator(".feedback-tolltip-wrapper").count() > 0:
-        reset_chat(page)
+    ensure_fresh_session(page)  # 이전 실행에서 남은 대화 세션 확실히 초기화
 
     for i, q in enumerate(questions):
         answer = ask_and_get_answer(page, q)
@@ -81,7 +87,26 @@ def run(playwright: Playwright) -> None:
         print(f"[{i + 1}/{len(questions)}] 완료: {q}")
 
         if i < len(questions) - 1:
-            reset_chat(page)
+            ensure_fresh_session(page)  # 리셋 시도 후 정말 깨끗해졌는지 확인, 안 됐으면 재시도
+
+    # 최종 검증: question/answer가 빈 값인 항목이 있으면 재질의
+    max_retry = 3
+    for attempt in range(max_retry):
+        blanks = [r for r in results if not r["question"].strip() or not r["answer"].strip()]
+        if not blanks:
+            break
+        print(f"[재검증 {attempt + 1}/{max_retry}] 빈 값 {len(blanks)}건 재질의")
+        for r in blanks:
+            ensure_fresh_session(page)
+            r["answer"] = ask_and_get_answer(page, r["question"])
+            r["timestamp"] = datetime.now().isoformat()
+    else:
+        blanks = [r for r in results if not r["question"].strip() or not r["answer"].strip()]
+        if blanks:
+            raise RuntimeError(
+                f"{max_retry}번 재시도했지만 여전히 빈 값이 있습니다: "
+                f"{[r['question'] for r in blanks]}"
+            )
 
     context.close()
 
