@@ -30,9 +30,9 @@ def create_room():
     if is_private:
         members = {m.strip() for m in (body.get("members") or []) if isinstance(m, str) and m.strip()}
         members.discard(nickname)
-        invalid = [m for m in members if not auth.is_active(m)]
+        invalid = [m for m in members if not db.user_exists(m)]
         if invalid:
-            return jsonify(error=f"현재 접속 중이 아닌 사용자는 초대할 수 없습니다: {', '.join(invalid)}"), 400
+            return jsonify(error=f"등록되지 않은 사용자는 초대할 수 없습니다: {', '.join(invalid)}"), 400
 
     room = db.create_group_room(name, nickname, members, is_private=is_private)
     for member in members:
@@ -108,8 +108,8 @@ def invite_room_member(room_id):
     target = ((request.get_json(silent=True) or {}).get("nickname") or "").strip()
     if not target:
         return jsonify(error="초대할 사용자를 선택해주세요."), 400
-    if not auth.is_active(target):
-        return jsonify(error="현재 접속 중인 사용자만 초대할 수 있습니다."), 400
+    if not db.user_exists(target):
+        return jsonify(error="등록되지 않은 사용자입니다."), 400
     if db.is_room_participant(room_id, target):
         return jsonify(error="이미 참여 중인 사용자입니다."), 400
 
@@ -126,7 +126,7 @@ def invite_room_member(room_id):
     )
     socketio.emit(
         "room_member_added",
-        {"room_id": room_id, "room_name": room["name"], "nickname": target},
+        {"room_id": room_id, "room_name": room["name"], "nickname": target, "online": auth.is_active(target)},
         room=str(room_id),
     )
     _notify_member(target, "room_member_added", {"room_id": room_id, "room_name": room["name"]})
@@ -182,6 +182,17 @@ def start_direct_room():
 def active_users():
     nickname = _require_login()
     return jsonify(users=[u for u in auth.list_active() if u != nickname])
+
+
+@rooms_bp.route("/all_users")
+def all_users():
+    """방 생성/초대 후보 목록: 접속 여부와 무관하게 DB에 로그인 이력이 있는 전체 사용자."""
+    nickname = _require_login()
+    users = sorted(
+        ({"nickname": u, "online": auth.is_active(u)} for u in db.list_all_users() if u != nickname),
+        key=lambda u: (not u["online"], u["nickname"]),
+    )
+    return jsonify(users=users)
 
 
 @rooms_bp.route("/messages/<int:message_id>/reactions", methods=["POST"])

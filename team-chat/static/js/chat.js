@@ -24,6 +24,14 @@
   }
   const mentionCandidates = [MENTION_ALL, ...roomMembers];
 
+  // 참여 인원 모달의 온라인/오프라인 점 표시를 실시간으로 갱신하기 위한 현재 접속자 집합
+  let onlineUsers = new Set();
+  try {
+    onlineUsers = new Set(JSON.parse(page.dataset.onlineUsers || "[]"));
+  } catch (e) {
+    onlineUsers = new Set();
+  }
+
   const socket = (window.ChatNotify && window.ChatNotify.getSocket()) || io();
 
   let latestMessageId = Number(page.dataset.lastMessageId) || 0;
@@ -326,7 +334,12 @@
 
   socket.on("room_member_added", (data) => {
     if (Number(data.room_id) !== Number(roomId)) return;
-    if (data.nickname) addMemberToUI(data.nickname);
+    if (data.nickname) addMemberToUI(data.nickname, !!data.online);
+  });
+
+  socket.on("active_users_update", (data) => {
+    onlineUsers = new Set(data.users || []);
+    refreshParticipantStatusDots();
   });
 
   socket.on("room_member_removed", (data) => {
@@ -544,25 +557,48 @@
     });
   }
 
-  // ---- 비공개 방 멤버 관리 모달 ----
-  const membersBtn = document.getElementById("btn-members");
-  const membersModal = document.getElementById("members-modal");
+  // ---- 참여 인원 조회/관리 모달 ----
+  const participantsBtn = document.getElementById("btn-participants");
+  const participantsModal = document.getElementById("participants-modal");
 
-  function addMemberToUI(memberNickname) {
-    if (!membersModal) return;
-    const list = document.getElementById("members-list");
+  function statusDot(online) {
+    const dot = document.createElement("span");
+    dot.className = "status-dot " + (online ? "online" : "offline");
+    return dot;
+  }
+
+  function refreshParticipantStatusDots() {
+    if (!participantsModal) return;
+    participantsModal.querySelectorAll("#participants-list [data-nickname]").forEach((li) => {
+      const dot = li.querySelector(".status-dot");
+      if (!dot) return;
+      const isOnline = li.dataset.nickname === nickname || onlineUsers.has(li.dataset.nickname);
+      dot.classList.toggle("online", isOnline);
+      dot.classList.toggle("offline", !isOnline);
+    });
+  }
+
+  function addMemberToUI(memberNickname, online) {
+    if (!participantsModal) return;
+    const list = document.getElementById("participants-list");
     if (!list || list.querySelector(`[data-nickname="${CSS.escape(memberNickname)}"]`)) return;
     const li = document.createElement("li");
     li.className = "room-item";
     li.dataset.nickname = memberNickname;
-    li.innerHTML = `<span class="room-name">${escapeHtml(memberNickname)}</span>`;
+
+    const span = document.createElement("span");
+    span.className = "room-name";
+    span.appendChild(statusDot(online));
+    span.appendChild(document.createTextNode(memberNickname));
+    li.appendChild(span);
+
     const canManage = !!document.getElementById("invite-select");
     if (canManage) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn-danger btn-remove-member";
       btn.dataset.nickname = memberNickname;
-      btn.textContent = "제거";
+      btn.textContent = "삭제";
       li.appendChild(btn);
     }
     list.appendChild(li);
@@ -574,40 +610,41 @@
   }
 
   function removeMemberFromUI(memberNickname) {
-    if (!membersModal) return;
-    const list = document.getElementById("members-list");
+    if (!participantsModal) return;
+    const list = document.getElementById("participants-list");
     const li = list && list.querySelector(`[data-nickname="${CSS.escape(memberNickname)}"]`);
     if (li) li.remove();
     const inviteSelect = document.getElementById("invite-select");
     if (inviteSelect && !inviteSelect.querySelector(`option[value="${CSS.escape(memberNickname)}"]`)) {
       const opt = document.createElement("option");
       opt.value = memberNickname;
-      opt.textContent = memberNickname;
+      opt.textContent = `${onlineUsers.has(memberNickname) ? "🟢" : "⚪"} ${memberNickname}`;
       inviteSelect.appendChild(opt);
     }
   }
 
-  if (membersBtn && membersModal) {
-    const membersModalClose = document.getElementById("members-modal-close");
-    const membersError = document.getElementById("members-error");
+  if (participantsBtn && participantsModal) {
+    const participantsModalClose = document.getElementById("participants-modal-close");
+    const participantsError = document.getElementById("participants-error");
     const inviteBtn = document.getElementById("btn-invite");
     const inviteSelect = document.getElementById("invite-select");
 
-    membersBtn.addEventListener("click", () => {
-      if (membersError) membersError.textContent = "";
-      membersModal.hidden = false;
+    participantsBtn.addEventListener("click", () => {
+      if (participantsError) participantsError.textContent = "";
+      refreshParticipantStatusDots();
+      participantsModal.hidden = false;
     });
-    membersModalClose.addEventListener("click", () => {
-      membersModal.hidden = true;
+    participantsModalClose.addEventListener("click", () => {
+      participantsModal.hidden = true;
     });
-    membersModal.addEventListener("click", (e) => {
-      if (e.target === membersModal) membersModal.hidden = true;
+    participantsModal.addEventListener("click", (e) => {
+      if (e.target === participantsModal) participantsModal.hidden = true;
     });
 
     if (inviteBtn && inviteSelect) {
       inviteBtn.addEventListener("click", async () => {
         const target = inviteSelect.value;
-        if (membersError) membersError.textContent = "";
+        if (participantsError) participantsError.textContent = "";
         if (!target) return;
         try {
           const res = await fetch(`/api/rooms/${roomId}/members`, {
@@ -617,34 +654,34 @@
           });
           const data = await res.json();
           if (!res.ok) {
-            if (membersError) membersError.textContent = data.error || "초대에 실패했습니다.";
+            if (participantsError) participantsError.textContent = data.error || "초대에 실패했습니다.";
             return;
           }
-          addMemberToUI(target);
+          addMemberToUI(target, onlineUsers.has(target));
         } catch (err) {
-          if (membersError) membersError.textContent = "초대 중 오류가 발생했습니다.";
+          if (participantsError) participantsError.textContent = "초대 중 오류가 발생했습니다.";
         }
       });
     }
 
-    document.getElementById("members-list").addEventListener("click", async (e) => {
+    document.getElementById("participants-list").addEventListener("click", async (e) => {
       const btn = e.target.closest(".btn-remove-member");
       if (!btn) return;
       const target = btn.dataset.nickname;
       if (!confirm(`${target}님을 방에서 제외하시겠습니까?`)) return;
-      if (membersError) membersError.textContent = "";
+      if (participantsError) participantsError.textContent = "";
       try {
         const res = await fetch(`/api/rooms/${roomId}/members/${encodeURIComponent(target)}`, {
           method: "DELETE",
         });
         const data = await res.json();
         if (!res.ok) {
-          if (membersError) membersError.textContent = data.error || "제외에 실패했습니다.";
+          if (participantsError) participantsError.textContent = data.error || "제외에 실패했습니다.";
           return;
         }
         removeMemberFromUI(target);
       } catch (err) {
-        if (membersError) membersError.textContent = "제외 중 오류가 발생했습니다.";
+        if (participantsError) participantsError.textContent = "제외 중 오류가 발생했습니다.";
       }
     });
   }

@@ -18,6 +18,15 @@
   const groupRoomList = document.getElementById("group-room-list");
 
   const selectedMembers = new Set();
+  // 방 생성 초대 후보(DB에 등록된 전체 사용자)의 최신 온라인 상태를 기억해뒀다가
+  // 선택 목록/드롭다운의 점 표시를 갱신할 때 쓴다.
+  const nicknameOnlineMap = new Map();
+
+  function statusDot(online) {
+    const dot = document.createElement("span");
+    dot.className = "status-dot " + (online ? "online" : "offline");
+    return dot;
+  }
 
   function updateVisibilityUI() {
     const isPrivate = !!(privateToggle && privateToggle.checked);
@@ -39,7 +48,8 @@
 
       const span = document.createElement("span");
       span.className = "room-name";
-      span.textContent = nickname;
+      span.appendChild(statusDot(!!nicknameOnlineMap.get(nickname)));
+      span.appendChild(document.createTextNode(nickname));
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -61,10 +71,12 @@
     memberList.hidden = !(privateToggle && privateToggle.checked) || selectedMembers.size === 0;
   }
 
-  // 접속 중인 사용자 드롭다운/목록을 최신 사용자 배열로 다시 그린다.
-  // 페이지 최초 렌더(Jinja) 이후로는 이 함수 하나로 실시간 push(#2)와
-  // 모달을 열 때의 강제 재조회(#1)가 동일한 경로로 반영된다.
-  function applyActiveUsers(users) {
+  // 방 생성 시 초대 후보(select) 목록을 DB에 등록된 전체 사용자로 다시 그린다.
+  // 온라인/오프라인 여부는 🟢/⚪ 표시로만 구분하고, 선택 자체는 오프라인 사용자도 가능하다.
+  function applyAllUsers(users) {
+    nicknameOnlineMap.clear();
+    users.forEach((u) => nicknameOnlineMap.set(u.nickname, u.online));
+
     if (memberSelect) {
       const currentValue = memberSelect.value;
       memberSelect.innerHTML = "";
@@ -75,62 +87,67 @@
 
       users.forEach((u) => {
         const opt = document.createElement("option");
-        opt.value = u;
-        opt.textContent = u;
-        if (selectedMembers.has(u)) opt.hidden = true;
+        opt.value = u.nickname;
+        opt.textContent = `${u.online ? "🟢" : "⚪"} ${u.nickname}`;
+        if (selectedMembers.has(u.nickname)) opt.hidden = true;
         memberSelect.appendChild(opt);
       });
-      memberSelect.value = users.includes(currentValue) ? currentValue : "";
-
-      // 이미 선택해둔 멤버가 그 사이 접속 종료됐다면 선택 목록에서도 빼준다.
-      let changed = false;
-      Array.from(selectedMembers).forEach((m) => {
-        if (!users.includes(m)) {
-          selectedMembers.delete(m);
-          changed = true;
-        }
-      });
-      if (changed) renderMemberList();
+      memberSelect.value = users.some((u) => u.nickname === currentValue) ? currentValue : "";
     }
 
-    if (activeUsersList) {
-      activeUsersList.innerHTML = "";
-      if (users.length === 0) {
-        const li = document.createElement("li");
-        li.className = "empty";
-        li.textContent = "다른 접속자가 없습니다.";
-        activeUsersList.appendChild(li);
-      } else {
-        users.forEach((u) => {
-          const li = document.createElement("li");
-          li.className = "room-item";
-
-          const span = document.createElement("span");
-          span.className = "room-name";
-          span.textContent = u;
-
-          const btn = document.createElement("button");
-          btn.className = "btn-secondary btn-dm";
-          btn.dataset.target = u;
-          btn.textContent = "1:1 대화";
-          bindDmButton(btn);
-
-          li.appendChild(span);
-          li.appendChild(btn);
-          activeUsersList.appendChild(li);
-        });
-      }
-    }
-
+    renderMemberList();
     updateVisibilityUI();
   }
 
-  async function fetchActiveUsers() {
+  // 소켓으로 접속자 목록이 바뀔 때는 전체 목록을 다시 받아오지 않고, 이미 그려둔
+  // select/선택 목록의 🟢/⚪ 표시만 최신 상태로 갱신한다.
+  function refreshOnlineDots(onlineSet) {
+    nicknameOnlineMap.forEach((_, nickname) => nicknameOnlineMap.set(nickname, onlineSet.has(nickname)));
+    if (memberSelect) {
+      Array.from(memberSelect.options).forEach((opt) => {
+        if (!opt.value) return;
+        opt.textContent = `${onlineSet.has(opt.value) ? "🟢" : "⚪"} ${opt.value}`;
+      });
+    }
+    renderMemberList();
+  }
+
+  function applyActiveUsersPanel(users) {
+    if (!activeUsersList) return;
+    activeUsersList.innerHTML = "";
+    if (users.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "다른 접속자가 없습니다.";
+      activeUsersList.appendChild(li);
+      return;
+    }
+    users.forEach((u) => {
+      const li = document.createElement("li");
+      li.className = "room-item";
+
+      const span = document.createElement("span");
+      span.className = "room-name";
+      span.textContent = u;
+
+      const btn = document.createElement("button");
+      btn.className = "btn-secondary btn-dm";
+      btn.dataset.target = u;
+      btn.textContent = "1:1 대화";
+      bindDmButton(btn);
+
+      li.appendChild(span);
+      li.appendChild(btn);
+      activeUsersList.appendChild(li);
+    });
+  }
+
+  async function fetchAllUsers() {
     try {
-      const res = await fetch("/api/active_users");
+      const res = await fetch("/api/all_users");
       if (!res.ok) return;
       const data = await res.json();
-      applyActiveUsers(data.users || []);
+      applyAllUsers(data.users || []);
     } catch (err) {
       // 네트워크 오류 시에는 마지막으로 알고 있던 목록을 그대로 둔다.
     }
@@ -168,9 +185,9 @@
     resetCreateRoomForm();
     if (modal) modal.hidden = false;
     if (nameInput) nameInput.focus();
-    // 모달을 열 때마다 접속자 목록을 한 번 더 재조회해서, 혹시 놓쳤을 수도 있는
+    // 모달을 열 때마다 전체 사용자 목록을 한 번 더 재조회해서, 혹시 놓쳤을 수도 있는
     // 실시간 이벤트(소켓 유실 등)와 무관하게 항상 최신 상태로 시작하게 한다.
-    fetchActiveUsers();
+    fetchAllUsers();
   }
 
   function closeCreateRoomModal() {
@@ -292,7 +309,9 @@
 
     socket.on("active_users_update", (data) => {
       const myNickname = document.body.dataset.nickname;
-      applyActiveUsers((data.users || []).filter((u) => u !== myNickname));
+      const users = data.users || [];
+      applyActiveUsersPanel(users.filter((u) => u !== myNickname));
+      refreshOnlineDots(new Set(users));
     });
   }
 })();

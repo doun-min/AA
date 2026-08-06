@@ -31,6 +31,12 @@ def db_cursor(commit=False):
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    nickname TEXT PRIMARY KEY,
+    first_login_at TEXT NOT NULL,
+    last_login_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS rooms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -151,10 +157,39 @@ def today_kst():
     return datetime.now(KST).date()
 
 
+def _backfill_users_from_history(cur):
+    """users 테이블 도입 이전부터 있던 방/메시지 기록에서 닉네임을 역으로 채워 넣는다.
+    (로그인 이력을 별도로 남기지 않았던 시절의 계정도 '전체 사용자' 목록에서 누락되지 않도록)"""
+    cur.execute(
+        """
+        INSERT OR IGNORE INTO users (nickname, first_login_at, last_login_at)
+        SELECT nickname, MIN(created_at), MAX(created_at) FROM (
+            SELECT sender AS nickname, created_at FROM messages
+            UNION ALL
+            SELECT owner_nickname AS nickname, created_at FROM rooms WHERE owner_nickname IS NOT NULL
+            UNION ALL
+            SELECT created_by AS nickname, created_at FROM rooms WHERE created_by IS NOT NULL
+        )
+        GROUP BY nickname
+        """
+    )
+    cur.execute(
+        "INSERT OR IGNORE INTO users (nickname, first_login_at, last_login_at) "
+        "SELECT nickname, joined_at, joined_at FROM room_participants"
+    )
+    now = _now()
+    cur.execute(
+        "INSERT OR IGNORE INTO users (nickname, first_login_at, last_login_at) "
+        "SELECT nickname, ?, ? FROM direct_participants",
+        (now, now),
+    )
+
+
 def init_db():
     os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
     with db_cursor(commit=True) as cur:
         cur.executescript(SCHEMA)
+        _backfill_users_from_history(cur)
         cur.execute("PRAGMA table_info(schedules)")
         columns = {row["name"] for row in cur.fetchall()}
         if "end_date" not in columns:
@@ -179,6 +214,29 @@ def init_db():
                 "VALUES (?,?,?,?,?,0)",
                 (config.SCHEDULE_ROOM_NAME, "group", None, None, _now()),
             )
+
+
+def upsert_user_login(nickname):
+    now = _now()
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO users (nickname, first_login_at, last_login_at) VALUES (?,?,?) "
+            "ON CONFLICT(nickname) DO UPDATE SET last_login_at=excluded.last_login_at",
+            (nickname, now, now),
+        )
+
+
+def list_all_users():
+    """DB에 로그인 이력이 남아있는 전체 사용자 닉네임(접속 상태와 무관하게)을 반환한다."""
+    with db_cursor() as cur:
+        cur.execute("SELECT nickname FROM users ORDER BY nickname COLLATE NOCASE ASC")
+        return [r["nickname"] for r in cur.fetchall()]
+
+
+def user_exists(nickname):
+    with db_cursor() as cur:
+        cur.execute("SELECT 1 FROM users WHERE nickname=?", (nickname,))
+        return cur.fetchone() is not None
 
 
 def get_room(room_id):

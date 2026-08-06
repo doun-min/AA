@@ -86,11 +86,11 @@
       <div class="member-invite-row" id="new-room-invite-row" hidden>
         <select id="new-room-member-select">
           <option value="">초대할 사용자 선택</option>
-          {% for user in active_users %}<option value="{{ user }}">{{ user }}</option>{% endfor %}
+          {% for user in all_users %}<option value="{{ user.nickname }}">{{ '🟢' if user.online else '⚪' }} {{ user.nickname }}</option>{% endfor %}
         </select>
         <button type="button" id="btn-add-room-member" class="btn-secondary">추가</button>
       </div>
-      <p class="hint" id="new-room-no-users-hint" {% if active_users %}hidden{% endif %}>현재 접속 중인 다른 사용자가 없습니다.</p>
+      <p class="hint" id="new-room-no-users-hint" {% if all_users %}hidden{% endif %}>등록된 다른 사용자가 없습니다.</p>
       <ul class="room-list" id="new-room-member-list" hidden></ul>
 
       <p id="room-error" class="error"></p>

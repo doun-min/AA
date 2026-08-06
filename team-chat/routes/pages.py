@@ -37,6 +37,8 @@ def login_page():
     if not auth.try_register_nickname(nickname):
         return render_template("login.html", error="이미 사용 중인 닉네임입니다.")
 
+    db.upsert_user_login(nickname)
+
     session.clear()
     session["nickname"] = nickname
     session.permanent = True
@@ -67,6 +69,12 @@ def rooms_page():
     group_rooms = db.list_group_rooms_for(nickname)
     direct_rooms = db.list_direct_rooms_for(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
+    # 방 생성 시 초대 후보는 접속 여부와 무관하게 DB에 로그인 이력이 있는 전체 사용자로 노출하고,
+    # 온라인 상태는 화면에서 구분 표시만 한다.
+    all_users = sorted(
+        ({"nickname": u, "online": auth.is_active(u)} for u in db.list_all_users() if u != nickname),
+        key=lambda u: (not u["online"], u["nickname"]),
+    )
     # 1:1 방은 멘션 여부와 무관하게 안 읽은 메시지 수로 배지를 표시하므로,
     # 멘션 카운트 위에 direct 방 카운트를 덮어씌운다(그룹/전체 방은 멘션 카운트 그대로).
     mention_counts = {
@@ -80,6 +88,7 @@ def rooms_page():
         group_rooms=group_rooms,
         direct_rooms=direct_rooms,
         active_users=active_users,
+        all_users=all_users,
         mention_counts=mention_counts,
     )
 
@@ -123,10 +132,30 @@ def chat_page(room_id):
     messages = db.list_messages_with_unread(room_id)
     is_owner = room.get("owner_nickname") == nickname
     is_superadmin = auth.is_superadmin(nickname)
-    active_users = [u for u in auth.list_active() if u != nickname]
+    can_manage = is_owner or is_superadmin
     room_members = [n for n in db.get_room_member_nicknames(room_id, room["type"]) if n != nickname]
-    # 비공개 방 초대 후보: 현재 접속 중이면서 아직 멤버가 아닌 사용자
-    invitable_users = [u for u in active_users if u not in room_members]
+
+    # 참여 인원 모달에 표시할 목록: 나(항상 온라인) + 다른 참여자(온라인 우선 정렬), 각자 접속 상태 포함
+    other_participants = sorted(
+        ({"nickname": n, "online": auth.is_active(n)} for n in room_members),
+        key=lambda p: (not p["online"], p["nickname"]),
+    )
+    participants = [{"nickname": nickname, "online": True, "is_self": True}] + [
+        {**p, "is_self": False} for p in other_participants
+    ]
+
+    # 비공개 방 초대 후보: 접속 여부와 무관하게 DB에 등록된 전체 사용자 중 아직 멤버가 아닌 사용자
+    # (공개 방은 누구나 접근 가능해 멤버 초대/제거 개념이 없으므로 비공개 방에서만 필요하다)
+    invitable_users = []
+    if room["is_private"]:
+        invitable_users = sorted(
+            (
+                {"nickname": u, "online": auth.is_active(u)}
+                for u in db.list_all_users()
+                if u != nickname and u not in room_members
+            ),
+            key=lambda u: (not u["online"], u["nickname"]),
+        )
 
     message_ids = [m["id"] for m in messages if m["type"] != "system"]
     reaction_counts = db.get_message_reaction_counts(message_ids)
@@ -142,9 +171,9 @@ def chat_page(room_id):
         nickname=nickname,
         is_owner=is_owner,
         is_superadmin=is_superadmin,
-        can_manage=is_owner or is_superadmin,
+        can_manage=can_manage,
         room_deletable=bool(room["is_deletable"]),
-        active_users=active_users,
+        participants=participants,
         room_members=room_members,
         invitable_users=invitable_users,
         schedule_banner=schedule_banner,
