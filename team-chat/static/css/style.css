@@ -165,11 +165,14 @@ button { font-family: inherit; }
 .message.me .msg-body { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 .msg-image { max-width: 260px; border-radius: 8px; display: block; cursor: pointer; }
 
-.msg-react-btn {
+.msg-react-btn, .msg-delete-btn {
   border: none; background: transparent; color: var(--text-muted); cursor: pointer;
   font-size: 11px; padding: 0 2px; border-radius: 4px; opacity: 0.6;
 }
-.msg-react-btn:hover { opacity: 1; background: var(--border); }
+.msg-react-btn:hover, .msg-delete-btn:hover { opacity: 1; background: var(--border); }
+
+.msg-body-deleted { color: var(--text-muted); font-style: italic; background: transparent; }
+.message.me .msg-body-deleted { background: transparent; color: var(--text-muted); border-color: var(--border); }
 
 .msg-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .msg-reactions:empty { display: none; }

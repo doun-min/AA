@@ -222,3 +222,21 @@ def toggle_message_reaction(message_id):
     }
     socketio.emit("reaction_update", payload, room=str(msg["room_id"]))
     return jsonify(added=added, counts=counts)
+
+
+@rooms_bp.route("/messages/<int:message_id>", methods=["DELETE"])
+def delete_message(message_id):
+    nickname = _require_login()
+    msg = db.get_message(message_id)
+    if not msg or msg["type"] == "system" or msg["deleted_at"]:
+        abort(404)
+    if msg["sender"] != nickname:
+        return jsonify(error="본인 메시지만 삭제할 수 있습니다."), 403
+
+    db.delete_message(message_id)
+    socketio.emit(
+        "message_deleted",
+        {"message_id": message_id, "room_id": msg["room_id"]},
+        room=str(msg["room_id"]),
+    )
+    return jsonify(ok=True)

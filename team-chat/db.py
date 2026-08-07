@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS messages (
     content TEXT,
     file_path TEXT,
     original_filename TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    deleted_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS message_reactions (
@@ -200,6 +201,10 @@ def init_db():
         if "is_private" not in columns:
             # 기존에 이미 만들어진 방들은 지금처럼 공개(누구나 접근 가능)로 유지한다.
             cur.execute("ALTER TABLE rooms ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        cur.execute("PRAGMA table_info(messages)")
+        columns = {row["name"] for row in cur.fetchall()}
+        if "deleted_at" not in columns:
+            cur.execute("ALTER TABLE messages ADD COLUMN deleted_at TEXT")
         cur.execute("SELECT id FROM rooms WHERE type='global' LIMIT 1")
         if cur.fetchone() is None:
             cur.execute(
@@ -512,6 +517,12 @@ def get_message(message_id):
         cur.execute("SELECT * FROM messages WHERE id=?", (message_id,))
         row = cur.fetchone()
         return dict(row) if row else None
+
+
+def delete_message(message_id):
+    """내용은 지우지 않고 deleted_at만 남겨, 화면에서는 '삭제된 메시지'로만 표시한다(소프트 삭제)."""
+    with db_cursor(commit=True) as cur:
+        cur.execute("UPDATE messages SET deleted_at=? WHERE id=?", (_now(), message_id))
 
 
 def toggle_message_reaction(message_id, nickname, reaction):

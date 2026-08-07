@@ -127,11 +127,14 @@
       }
       const unreadCount = msg.unread_count || 0;
       const unreadAttr = unreadCount ? "" : " hidden";
+      const deleteBtnHtml = mine
+        ? `<button type="button" class="msg-delete-btn" data-msg-id="${msg.id}" title="메시지 삭제">🗑</button>`
+        : "";
       div.innerHTML =
         `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span>` +
         `<span class="msg-unread" data-msg-id="${msg.id}"${unreadAttr}>${unreadCount}</span>` +
         `<span class="msg-time">${time}</span>` +
-        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기">🙂+</button></div>` +
+        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기">🙂+</button>${deleteBtnHtml}</div>` +
         body +
         `<div class="msg-reactions"></div>`;
     }
@@ -220,6 +223,44 @@
       alert("반응을 남기는 중 오류가 발생했습니다.");
     }
   }
+
+  function applyDeletedMessage(msgDiv) {
+    msgDiv.querySelector(".msg-react-btn")?.remove();
+    msgDiv.querySelector(".msg-delete-btn")?.remove();
+    msgDiv.querySelector(".msg-reactions")?.remove();
+    const body = msgDiv.querySelector(".msg-body");
+    if (body) {
+      body.className = "msg-body msg-body-deleted";
+      body.textContent = "삭제된 메시지입니다.";
+    }
+  }
+
+  async function deleteMessage(msgId) {
+    if (!confirm("메시지를 삭제할까요?")) return;
+    try {
+      const res = await fetch(`/api/messages/${msgId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "메시지를 삭제하지 못했습니다.");
+        return;
+      }
+      // 화면 갱신은 message_deleted 소켓 이벤트로 처리한다.
+    } catch (err) {
+      alert("메시지를 삭제하는 중 오류가 발생했습니다.");
+    }
+  }
+
+  messagesEl.addEventListener("click", (e) => {
+    const delBtn = e.target.closest(".msg-delete-btn");
+    if (delBtn) deleteMessage(delBtn.dataset.msgId);
+  });
+
+  socket.on("message_deleted", (data) => {
+    if (Number(data.room_id) !== Number(roomId)) return;
+    const msgDiv = messagesEl.querySelector(`.message[data-msg-id="${data.message_id}"]`);
+    if (!msgDiv) return;
+    applyDeletedMessage(msgDiv);
+  });
 
   const reactionPicker = document.getElementById("reaction-picker");
   let pickerTargetMsgId = null;

@@ -33,12 +33,21 @@
            {% if m.type != 'system' %}data-reactions='{{ reaction_counts.get(m.id, {})|tojson }}' data-my-reactions='{{ my_reactions.get(m.id, [])|tojson }}'{% endif %}>
         {% if m.type == 'system' %}
           <div class="system-text">{{ m.content }}</div>
+        {% elif m.deleted_at %}
+          <div class="msg-meta">
+            <span class="msg-sender">{{ m.sender }}</span>
+            <span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span>
+          </div>
+          <div class="msg-body msg-body-deleted">삭제된 메시지입니다.</div>
         {% else %}
           <div class="msg-meta">
             <span class="msg-sender">{{ m.sender }}</span>
             {% if m.unread_count %}<span class="msg-unread" data-msg-id="{{ m.id }}">{{ m.unread_count }}</span>{% else %}<span class="msg-unread" data-msg-id="{{ m.id }}" hidden></span>{% endif %}
             <span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span>
             <button type="button" class="msg-react-btn" data-msg-id="{{ m.id }}" title="반응 남기기">🙂+</button>
+            {% if m.sender == nickname %}
+            <button type="button" class="msg-delete-btn" data-msg-id="{{ m.id }}" title="메시지 삭제">🗑</button>
+            {% endif %}
           </div>
           {% if m.type == 'text' %}
             <div class="msg-body">{{ m.content }}</div>
