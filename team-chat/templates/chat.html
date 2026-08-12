@@ -45,6 +45,7 @@
             {% if m.unread_count %}<span class="msg-unread" data-msg-id="{{ m.id }}">{{ m.unread_count }}</span>{% else %}<span class="msg-unread" data-msg-id="{{ m.id }}" hidden></span>{% endif %}
             <span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span>
             <button type="button" class="msg-react-btn" data-msg-id="{{ m.id }}" title="반응 남기기">🙂+</button>
+            <button type="button" class="msg-reactors-btn" data-msg-id="{{ m.id }}" title="반응자 보기" hidden>👥</button>
             {% if m.sender == nickname %}
             <button type="button" class="msg-delete-btn" data-msg-id="{{ m.id }}" title="메시지 삭제">🗑</button>
             {% endif %}
@@ -57,6 +58,7 @@
             <div class="msg-body"><a href="{{ url_for('files.get_file', room_id=room.id, filename=m.file_path) }}" download="{{ m.original_filename }}">📎 {{ m.original_filename }}</a></div>
           {% endif %}
           <div class="msg-reactions"></div>
+          <div class="msg-reactors-detail" hidden></div>
         {% endif %}
       </div>
     {% endfor %}

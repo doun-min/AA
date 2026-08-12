@@ -134,9 +134,11 @@
         `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span>` +
         `<span class="msg-unread" data-msg-id="${msg.id}"${unreadAttr}>${unreadCount}</span>` +
         `<span class="msg-time">${time}</span>` +
-        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기">🙂+</button>${deleteBtnHtml}</div>` +
+        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기">🙂+</button>` +
+        `<button type="button" class="msg-reactors-btn" data-msg-id="${msg.id}" title="반응자 보기" hidden>👥</button>${deleteBtnHtml}</div>` +
         body +
-        `<div class="msg-reactions"></div>`;
+        `<div class="msg-reactions"></div>` +
+        `<div class="msg-reactors-detail" hidden></div>`;
     }
     messagesEl.appendChild(div);
     scrollToBottom();
@@ -179,9 +181,11 @@
     const msgId = msgDiv.dataset.msgId;
     const mine = getMyReactionSet(msgId);
     row.innerHTML = "";
+    let hasAny = false;
     REACTIONS.forEach(({ key, icon }) => {
       const count = (counts || {})[key] || 0;
       if (count <= 0) return;
+      hasAny = true;
       const names = (reactors || {})[key] || [];
       const btn = document.createElement("button");
       btn.type = "button";
@@ -189,10 +193,23 @@
       btn.dataset.reaction = key;
       btn.dataset.msgId = msgId;
       btn.textContent = `${icon} ${count}`;
-      // 마우스를 올리면 이 반응을 누른 사람 목록을 확인할 수 있다.
       if (names.length) btn.title = names.join(", ");
       row.appendChild(btn);
     });
+
+    const reactorsBtn = msgDiv.querySelector(".msg-reactors-btn");
+    const detail = msgDiv.querySelector(".msg-reactors-detail");
+    detail.innerHTML = "";
+    REACTIONS.forEach(({ key, icon }) => {
+      const names = (reactors || {})[key] || [];
+      if (!names.length) return;
+      const line = document.createElement("div");
+      line.className = "msg-reactors-line";
+      line.textContent = `${icon} ${names.join(", ")}`;
+      detail.appendChild(line);
+    });
+    if (reactorsBtn) reactorsBtn.hidden = !hasAny;
+    if (!hasAny) detail.hidden = true;
   }
 
   // 서버 렌더링(SSR)된 메시지들의 초기 반응 상태를 화면에 반영한다.
@@ -233,7 +250,9 @@
   function applyDeletedMessage(msgDiv) {
     msgDiv.querySelector(".msg-react-btn")?.remove();
     msgDiv.querySelector(".msg-delete-btn")?.remove();
+    msgDiv.querySelector(".msg-reactors-btn")?.remove();
     msgDiv.querySelector(".msg-reactions")?.remove();
+    msgDiv.querySelector(".msg-reactors-detail")?.remove();
     const body = msgDiv.querySelector(".msg-body");
     if (body) {
       body.className = "msg-body msg-body-deleted";
@@ -296,6 +315,13 @@
     const reactBtn = e.target.closest(".msg-react-btn");
     if (reactBtn) {
       openReactionPicker(reactBtn, reactBtn.dataset.msgId);
+      return;
+    }
+    const reactorsBtn = e.target.closest(".msg-reactors-btn");
+    if (reactorsBtn) {
+      const msgDiv = reactorsBtn.closest(".message");
+      const detail = msgDiv && msgDiv.querySelector(".msg-reactors-detail");
+      if (detail) detail.hidden = !detail.hidden;
     }
   });
 
