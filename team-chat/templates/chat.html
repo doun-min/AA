@@ -30,7 +30,7 @@
   <div id="messages" class="messages">
     {% for m in messages %}
       <div class="message {{ 'me' if m.sender == nickname else '' }} type-{{ m.type }}" data-msg-id="{{ m.id }}"
-           {% if m.type != 'system' %}data-reactions='{{ reaction_counts.get(m.id, {})|tojson }}' data-my-reactions='{{ my_reactions.get(m.id, [])|tojson }}'{% endif %}>
+           {% if m.type != 'system' %}data-reactions='{{ reaction_counts.get(m.id, {})|tojson }}' data-reaction-users='{{ reaction_users.get(m.id, {})|tojson }}' data-my-reactions='{{ my_reactions.get(m.id, [])|tojson }}'{% endif %}>
         {% if m.type == 'system' %}
           <div class="system-text">{{ m.content }}</div>
         {% elif m.deleted_at %}

@@ -212,6 +212,7 @@ def toggle_message_reaction(message_id):
 
     added = db.toggle_message_reaction(message_id, nickname, reaction)
     counts = db.get_message_reaction_counts([message_id]).get(message_id, {})
+    reactors = db.get_message_reactions_grouped([message_id]).get(message_id, {})
     payload = {
         "message_id": message_id,
         "room_id": msg["room_id"],
@@ -219,6 +220,7 @@ def toggle_message_reaction(message_id):
         "nickname": nickname,
         "added": added,
         "counts": counts,
+        "reactors": reactors,
     }
     socketio.emit("reaction_update", payload, room=str(msg["room_id"]))
     return jsonify(added=added, counts=counts)

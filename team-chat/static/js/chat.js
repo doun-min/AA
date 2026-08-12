@@ -173,7 +173,7 @@
     return myReactions.get(key);
   }
 
-  function renderReactions(msgDiv, counts) {
+  function renderReactions(msgDiv, counts, reactors) {
     const row = msgDiv.querySelector(".msg-reactions");
     if (!row) return;
     const msgId = msgDiv.dataset.msgId;
@@ -182,12 +182,15 @@
     REACTIONS.forEach(({ key, icon }) => {
       const count = (counts || {})[key] || 0;
       if (count <= 0) return;
+      const names = (reactors || {})[key] || [];
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "reaction-pill" + (mine.has(key) ? " mine" : "");
       btn.dataset.reaction = key;
       btn.dataset.msgId = msgId;
       btn.textContent = `${icon} ${count}`;
+      // 마우스를 올리면 이 반응을 누른 사람 목록을 확인할 수 있다.
+      if (names.length) btn.title = names.join(", ");
       row.appendChild(btn);
     });
   }
@@ -196,15 +199,18 @@
   messagesEl.querySelectorAll(".message[data-reactions]").forEach((msgDiv) => {
     let counts = {};
     let mine = [];
+    let reactors = {};
     try {
       counts = JSON.parse(msgDiv.dataset.reactions || "{}");
       mine = JSON.parse(msgDiv.dataset.myReactions || "[]");
+      reactors = JSON.parse(msgDiv.dataset.reactionUsers || "{}");
     } catch (e) {
       counts = {};
       mine = [];
+      reactors = {};
     }
     mine.forEach((key) => getMyReactionSet(msgDiv.dataset.msgId).add(key));
-    renderReactions(msgDiv, counts);
+    renderReactions(msgDiv, counts, reactors);
   });
 
   async function toggleReaction(msgId, reaction) {
@@ -318,7 +324,7 @@
       if (data.added) mine.add(data.reaction);
       else mine.delete(data.reaction);
     }
-    renderReactions(msgDiv, data.counts);
+    renderReactions(msgDiv, data.counts, data.reactors);
   });
 
   socket.on("new_message", (msg) => {

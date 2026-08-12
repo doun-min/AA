@@ -186,6 +186,21 @@ def _backfill_users_from_history(cur):
     )
 
 
+def _sync_public_room_participants(cur):
+    """공개 방(전체/공개 그룹방)은 누구나 접근 가능하므로, 실제로 방에 들어와본 적
+    없는 사용자도 room_participants에 등록해 @전체 멘션 대상과 참여 인원 목록이
+    '최초 1회 진입' 여부와 무관하게 항상 전체 사용자를 포함하도록 맞춘다."""
+    cur.execute(
+        """
+        INSERT OR IGNORE INTO room_participants (room_id, nickname, joined_at)
+        SELECT r.id, u.nickname, ?
+        FROM rooms r CROSS JOIN users u
+        WHERE r.is_private = 0 AND r.type IN ('global','group')
+        """,
+        (_now(),),
+    )
+
+
 def init_db():
     os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
     with db_cursor(commit=True) as cur:
@@ -219,6 +234,9 @@ def init_db():
                 "VALUES (?,?,?,?,?,0)",
                 (config.SCHEDULE_ROOM_NAME, "group", None, None, _now()),
             )
+        # 기존에 공개방을 한 번도 방문하지 않아 room_participants에서 빠져 있던
+        # 사용자를 기동 시점에 한 번 맞춰준다(과거 데이터 백필).
+        _sync_public_room_participants(cur)
 
 
 def upsert_user_login(nickname):
@@ -229,6 +247,9 @@ def upsert_user_login(nickname):
             "ON CONFLICT(nickname) DO UPDATE SET last_login_at=excluded.last_login_at",
             (nickname, now, now),
         )
+        # 새 사용자가 로그인하면 방을 한 번도 열지 않아도 모든 공개방의 참여자로
+        # 바로 등록해, @전체 멘션과 참여 인원 목록에 즉시 반영되도록 한다.
+        _sync_public_room_participants(cur)
 
 
 def list_all_users():
@@ -292,6 +313,10 @@ def create_group_room(name, creator, members=None, is_private=False):
                 "INSERT OR IGNORE INTO room_participants (room_id, nickname, joined_at) VALUES (?,?,?)",
                 [(room_id, n, now) for n in participants],
             )
+        else:
+            # 공개 방은 "최초 1회 진입"을 기다리지 않고, 만드는 시점에 이미 등록된
+            # 전체 사용자를 바로 참여자로 등록한다.
+            _sync_public_room_participants(cur)
         cur.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
         return dict(cur.fetchone())
 
@@ -559,6 +584,23 @@ def get_message_reaction_counts(message_ids):
         result = {}
         for r in cur.fetchall():
             result.setdefault(r["message_id"], {})[r["reaction"]] = r["c"]
+        return result
+
+
+def get_message_reactions_grouped(message_ids):
+    """{message_id: {reaction: [nickname, ...]}} 형태로, 반응별로 누가 눌렀는지 반환한다."""
+    if not message_ids:
+        return {}
+    placeholders = ",".join("?" for _ in message_ids)
+    with db_cursor() as cur:
+        cur.execute(
+            f"SELECT message_id, reaction, nickname FROM message_reactions "
+            f"WHERE message_id IN ({placeholders}) ORDER BY created_at ASC",
+            message_ids,
+        )
+        result = {}
+        for r in cur.fetchall():
+            result.setdefault(r["message_id"], {}).setdefault(r["reaction"], []).append(r["nickname"])
         return result
 
 

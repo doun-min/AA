@@ -159,6 +159,7 @@ def chat_page(room_id):
 
     message_ids = [m["id"] for m in messages if m["type"] != "system"]
     reaction_counts = db.get_message_reaction_counts(message_ids)
+    reaction_users = db.get_message_reactions_grouped(message_ids)
     my_reactions = db.get_message_reactions_by_user(message_ids, nickname)
 
     today_schedules = db.list_schedules_for_date(db.today_kst().isoformat())
@@ -178,5 +179,6 @@ def chat_page(room_id):
         invitable_users=invitable_users,
         schedule_banner=schedule_banner,
         reaction_counts=reaction_counts,
+        reaction_users=reaction_users,
         my_reactions=my_reactions,
     )
