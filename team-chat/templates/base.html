@@ -27,7 +27,7 @@
     <a class="sidebar-link {{ 'active' if request.endpoint in ('pages.rooms_page', 'pages.chat_page') else '' }}"
        href="{{ url_for('pages.rooms_page') }}">
       채팅
-      <span class="badge-count" id="sidebar-mention-badge" data-count="{{ sidebar_mention_total|default(0) }}" {% if not sidebar_mention_total %}hidden{% endif %}>{{ sidebar_mention_total|default(0) }}</span>
+      <span class="badge-count" id="sidebar-unread-badge" data-count="{{ sidebar_unread_total|default(0) }}" {% if not sidebar_unread_total %}hidden{% endif %}>{{ sidebar_unread_total|default(0) }}</span>
     </a>
     <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.schedule_page' else '' }}"
        href="{{ url_for('pages.schedule_page') }}">일정 관리</a>

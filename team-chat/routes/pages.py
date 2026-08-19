@@ -76,22 +76,32 @@ def rooms_page():
         ({"nickname": u, "online": auth.is_active(u)} for u in db.list_all_users() if u != nickname),
         key=lambda u: (not u["online"], u["nickname"]),
     )
-    # 1:1 방은 멘션 여부와 무관하게 안 읽은 메시지 수로 배지를 표시하므로,
-    # 멘션 카운트 위에 direct 방 카운트를 덮어씌운다(그룹/전체 방은 멘션 카운트 그대로).
-    mention_counts = {
-        **db.get_unread_mention_counts(nickname),
-        **db.get_unread_direct_message_counts(nickname),
-    }
-    # 계정 삭제 대상 목록(관리자 전용 패널): 관리자 계정과 본인은 애초에 제외해서 넘긴다.
+    # 방 종류와 무관하게 안 읽은 메시지 수 전체를 배지로 표시한다(멘션 여부 무관).
+    unread_counts = db.get_unread_message_counts(nickname)
+    # 계정 삭제/관리자 지정 대상 목록(관리자 전용 패널): 관리자 계정과 본인은 애초에 제외해서 넘긴다.
     manageable_users = []
+    admin_list = []
     if is_admin:
+        all_detailed = db.list_all_users_detailed()
         manageable_users = sorted(
             (
                 {"nickname": u["nickname"], "online": auth.is_active(u["nickname"])}
-                for u in db.list_all_users_detailed()
+                for u in all_detailed
                 if u["nickname"] != nickname and u["role"] != "admin"
             ),
             key=lambda u: (not u["online"], u["nickname"]),
+        )
+        admin_list = sorted(
+            (
+                {
+                    "nickname": u["nickname"],
+                    "online": auth.is_active(u["nickname"]),
+                    "is_self": u["nickname"] == nickname,
+                }
+                for u in all_detailed
+                if u["role"] == "admin"
+            ),
+            key=lambda u: (not u["is_self"], not u["online"], u["nickname"]),
         )
     return render_template(
         "rooms.html",
@@ -101,8 +111,9 @@ def rooms_page():
         direct_rooms=direct_rooms,
         active_users=active_users,
         all_users=all_users,
-        mention_counts=mention_counts,
+        unread_counts=unread_counts,
         manageable_users=manageable_users,
+        admin_list=admin_list,
     )
 
 

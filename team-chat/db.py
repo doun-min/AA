@@ -302,6 +302,11 @@ def list_all_users_detailed():
         return [dict(r) for r in cur.fetchall()]
 
 
+def set_user_role(nickname, role):
+    with db_cursor(commit=True) as cur:
+        cur.execute("UPDATE users SET role=? WHERE nickname=?", (role, nickname))
+
+
 def delete_user_account(nickname):
     """사용자 계정 자체를 시스템에서 제거한다. 과거에 보낸 메시지/소유한 방 기록은
     이력으로 그대로 남기고, 참여자 목록(room/direct participants)에서만 함께 뺀다."""
@@ -783,31 +788,32 @@ def add_mentions(message_id, room_id, target_nicknames):
         )
 
 
-def get_unread_direct_message_counts(nickname):
-    """1:1(direct) 방에서 상대가 보낸, 아직 읽지 않은 메시지 개수를 방별로 센다.
-    멘션 여부와 무관하게 모든 메시지를 카운트한다 — 1:1 대화는 특성상 서로 멘션을
-    안 붙이는 경우가 많아 멘션 배지만으로는 새 메시지 도착을 알아채기 어렵기 때문."""
+def get_unread_message_counts(nickname):
+    """전체/그룹/1:1 모든 방에서 아직 읽지 않은 메시지 개수를 방별로 센다.
+    멘션 여부와 무관하게 모든 메시지를 카운트한다 — 배지는 멘션 여부와 무관하게
+    "안 읽은 메시지가 있는지"를 보여주는 용도이고, OS 알림(팝업)만 멘션 기준으로 별도 동작한다."""
     with db_cursor() as cur:
         cur.execute(
             """
             SELECT m.room_id AS room_id, COUNT(*) AS c
             FROM messages m
-            JOIN direct_participants dp ON dp.room_id = m.room_id AND dp.nickname = ?
+            JOIN rooms r ON r.id = m.room_id
             WHERE m.sender != ? AND m.type != 'system'
               AND m.id NOT IN (SELECT message_id FROM message_reads WHERE user_id = ?)
+              AND (
+                (r.type = 'direct' AND EXISTS (
+                    SELECT 1 FROM direct_participants dp
+                    WHERE dp.room_id = m.room_id AND dp.nickname = ?
+                ))
+                OR
+                (r.type IN ('global','group') AND EXISTS (
+                    SELECT 1 FROM room_participants rp
+                    WHERE rp.room_id = m.room_id AND rp.nickname = ?
+                ))
+              )
             GROUP BY m.room_id
             """,
-            (nickname, nickname, nickname),
-        )
-        return {r["room_id"]: r["c"] for r in cur.fetchall()}
-
-
-def get_unread_mention_counts(nickname):
-    with db_cursor() as cur:
-        cur.execute(
-            "SELECT room_id, COUNT(*) AS c FROM mentions "
-            "WHERE target_nickname=? AND read_at IS NULL GROUP BY room_id",
-            (nickname,),
+            (nickname, nickname, nickname, nickname),
         )
         return {r["room_id"]: r["c"] for r in cur.fetchall()}
 

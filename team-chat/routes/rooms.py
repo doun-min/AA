@@ -332,3 +332,42 @@ def delete_user(nickname):
 
     broadcast_active_users()
     return jsonify(ok=True)
+
+
+@rooms_bp.route("/admins", methods=["POST"])
+def promote_admin():
+    """기존 관리자 전용: 일반 사용자를 관리자로 지정한다."""
+    requester = _require_login()
+    if not auth.is_admin(requester):
+        return jsonify(error="관리자를 지정할 권한이 없습니다."), 403
+
+    target = ((request.get_json(silent=True) or {}).get("nickname") or "").strip()
+    if not target:
+        return jsonify(error="지정할 사용자를 선택해주세요."), 400
+    if not db.user_exists(target):
+        return jsonify(error="존재하지 않는 사용자입니다."), 404
+    if auth.is_admin(target):
+        return jsonify(error="이미 관리자입니다."), 400
+
+    db.set_user_role(target, "admin")
+    socketio.emit("admin_role_changed", {"nickname": target, "role": "admin"})
+    return jsonify(ok=True)
+
+
+@rooms_bp.route("/admins/<nickname>", methods=["DELETE"])
+def demote_admin(nickname):
+    """기존 관리자 전용: 다른 관리자의 권한을 해제한다.
+    본인 해제는 막아서, 이 규칙만으로 관리자가 0명이 되는 상황을 원천 차단한다."""
+    requester = _require_login()
+    if not auth.is_admin(requester):
+        return jsonify(error="관리자를 해제할 권한이 없습니다."), 403
+    if nickname == requester:
+        return jsonify(error="본인은 해제할 수 없습니다. 다른 관리자에게 요청해주세요."), 400
+    if not db.user_exists(nickname):
+        return jsonify(error="존재하지 않는 사용자입니다."), 404
+    if not auth.is_admin(nickname):
+        return jsonify(error="관리자가 아닙니다."), 400
+
+    db.set_user_role(nickname, "member")
+    socketio.emit("admin_role_changed", {"nickname": nickname, "role": "member"})
+    return jsonify(ok=True)

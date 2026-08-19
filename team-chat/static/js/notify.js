@@ -52,8 +52,8 @@ window.ChatNotify = (function () {
     }
   }
 
-  function updateSidebarMentionBadge(total) {
-    const badge = document.getElementById("sidebar-mention-badge");
+  function updateSidebarUnreadBadge(total) {
+    const badge = document.getElementById("sidebar-unread-badge");
     if (!badge) return;
     if (total > 0) {
       badge.hidden = false;
@@ -72,8 +72,8 @@ window.ChatNotify = (function () {
 
     socket = io();
 
-    socket.on("mention_count_update", (data) => {
-      updateSidebarMentionBadge(data.total || 0);
+    socket.on("unread_count_update", (data) => {
+      updateSidebarUnreadBadge(data.total || 0);
     });
 
     socket.on("account_deleted", () => {
@@ -81,6 +81,12 @@ window.ChatNotify = (function () {
       fetch("/logout", { method: "POST" }).finally(() => {
         window.location.href = "/login";
       });
+    });
+
+    socket.on("admin_role_changed", (data) => {
+      if (data.nickname !== nickname) return;
+      alert(data.role === "admin" ? "관리자 권한이 부여되었습니다. 새로고침합니다." : "관리자 권한이 해제되었습니다. 새로고침합니다.");
+      window.location.reload();
     });
 
     socket.on("mention", (data) => {

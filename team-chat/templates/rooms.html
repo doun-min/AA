@@ -21,7 +21,7 @@
           {% if room.type == 'global' %}<span class="badge">전체</span>{% endif %}
           {% if room.is_private %}<span class="badge">🔒 비공개</span>{% endif %}
           {% if room.owner_nickname %}<span class="room-owner">방장: {{ room.owner_nickname }}</span>{% endif %}
-          {% set count = mention_counts.get(room.id, 0) %}
+          {% set count = unread_counts.get(room.id, 0) %}
           <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
         </a>
         {% if room.is_deletable and (room.owner_nickname == nickname or is_admin) %}
@@ -39,7 +39,7 @@
       <li class="room-item">
         <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
           <span class="room-name">{{ room.other }}</span>
-          {% set count = mention_counts.get(room.id, 0) %}
+          {% set count = unread_counts.get(room.id, 0) %}
           <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
         </a>
       </li>
@@ -62,6 +62,31 @@
   </section>
 
   {% if is_admin %}
+  <section class="panel">
+    <div class="panel-header"><h2>관리자 관리</h2></div>
+    <ul class="room-list" id="admin-list">
+      {% for user in admin_list %}
+      <li class="room-item" data-nickname="{{ user.nickname }}">
+        <span class="room-name">
+          <span class="status-dot {{ 'online' if user.online else 'offline' }}"></span>
+          {{ user.nickname }}{% if user.is_self %} (나){% endif %}
+        </span>
+        {% if not user.is_self %}
+        <button class="btn-danger btn-demote-admin" data-nickname="{{ user.nickname }}">해제</button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="member-invite-row">
+      <select id="promote-admin-select">
+        <option value="">관리자로 지정할 사용자 선택</option>
+        {% for u in manageable_users %}<option value="{{ u.nickname }}">{{ '🟢' if u.online else '⚪' }} {{ u.nickname }}</option>{% endfor %}
+      </select>
+      <button type="button" id="btn-promote-admin" class="btn-secondary">관리자 지정</button>
+    </div>
+    <p id="admin-manage-error" class="error"></p>
+  </section>
+
   <section class="panel">
     <div class="panel-header"><h2>사용자 관리</h2></div>
     <ul class="room-list" id="manageable-users-list">

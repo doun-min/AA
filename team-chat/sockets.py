@@ -39,17 +39,13 @@ def emit_room_badge_counts(nickname):
     sids = nickname_to_sids.get(nickname)
     if not sids:
         return
-    # 방 목록 배지(rooms.html)는 그룹/전체 방은 멘션 카운트, 1:1 방은 안 읽은
-    # 메시지 카운트를 쓴다. 사이드바 총합 배지(total)도 두 카운트를 합산해서
-    # "채팅" 메뉴만 봐도 안 읽은 멘션/1:1 메시지가 있는지 알 수 있게 한다.
-    # (OS 알림(Notification)은 이 total과 무관하게 멘션 기준 그대로.)
-    mention_counts = db.get_unread_mention_counts(nickname)
-    direct_counts = db.get_unread_direct_message_counts(nickname)
-    room_counts = {**mention_counts, **direct_counts}
-    total = sum(mention_counts.values()) + sum(direct_counts.values())
+    # 방 목록 배지(rooms.html)/사이드바 총합 배지는 방 종류와 무관하게 안 읽은 메시지
+    # 전체 개수를 쓴다. (OS 알림(Notification)은 이 total과 무관하게 멘션 기준 그대로.)
+    room_counts = db.get_unread_message_counts(nickname)
+    total = sum(room_counts.values())
     payload = {"total": total, "rooms": room_counts}
     for sid in sids:
-        emit("mention_count_update", payload, room=sid)
+        emit("unread_count_update", payload, room=sid)
 
 
 def _schedule_release(nickname):
@@ -205,13 +201,12 @@ def handle_mark_read(data):
         return
 
     msg_ids = db.mark_messages_read(room_id, nickname, up_to_message_id)
-    mentions_changed = db.mark_mentions_read(room_id, nickname, up_to_message_id)
-    # direct 방은 메시지를 읽음 처리한 것 자체가 배지 카운트에 영향을 주므로
-    # (멘션 여부와 무관하게) 메시지가 실제로 읽음 처리됐다면 항상 다시 계산해 보낸다.
-    if mentions_changed or (room["type"] == "direct" and msg_ids):
-        emit_room_badge_counts(nickname)
+    db.mark_mentions_read(room_id, nickname, up_to_message_id)
+    # 배지는 방 종류와 무관하게 안 읽은 메시지 수 전체를 쓰므로, 메시지가 실제로
+    # 읽음 처리됐다면(멘션 여부와 무관) 항상 다시 계산해 보낸다.
     if not msg_ids:
         return
+    emit_room_badge_counts(nickname)
 
     counts = db.get_messages_unread_counts(room_id, msg_ids)
     emit(
