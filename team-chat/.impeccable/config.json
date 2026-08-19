@@ -1,0 +1,32 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font-size",
+        "value": "18px",
+        "createdAt": "2026-08-19T06:01:42.729Z",
+        "reason": "Icon/emoji glyph sizing (☰ sidebar toggle, × modal close, 🔓/🔒 visibility icon), not a text-hierarchy step — documented as an explicit exception in DESIGN.md Typography."
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "15px",
+        "createdAt": "2026-08-19T06:01:42.949Z",
+        "reason": "Single intentional one-off on the drag-and-drop overlay prompt — documented as an explicit exception in DESIGN.md Typography."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "rgba(0, 0, 0, 0.35)",
+        "createdAt": "2026-08-19T06:01:43.140Z",
+        "reason": "Sidebar drawer scrim — documented in DESIGN.md Elevation & Depth (Shadow Vocabulary) and the .impeccable/design.json sidecar shadows array; overlay/scrim tokens are correctly excluded from the colors: frontmatter per the DESIGN.md spec."
+      },
+      {
+        "rule": "design-system-color",
+        "value": "rgba(0, 0, 0, 0.45)",
+        "createdAt": "2026-08-19T06:01:43.334Z",
+        "reason": "Modal backdrop scrim — documented in DESIGN.md Elevation & Depth (Shadow Vocabulary) and the .impeccable/design.json sidecar shadows array; overlay/scrim tokens are correctly excluded from the colors: frontmatter per the DESIGN.md spec."
+      }
+    ]
+  }
+}

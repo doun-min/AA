@@ -18,6 +18,7 @@
 <body data-nickname="{{ nickname|default('') }}">
 <script src="{{ url_for('static', filename='js/vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/notify.js') }}"></script>
+<script src="{{ url_for('static', filename='js/scrollbars.js') }}"></script>
 {% if nickname %}
 <button type="button" id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="사이드바 토글">&#9776;</button>
 <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>

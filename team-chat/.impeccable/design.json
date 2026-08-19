@@ -10,6 +10,8 @@
       "mention-indigo": { "role": "signal", "displayName": "Mention Indigo", "canonical": "oklch(50.1% 0.196 267.8)", "dark": "#ffd166", "tonalRamp": ["#04003f", "#0b136a", "#1e3398", "#3553c9", "#5377f0", "#789eff", "#a0c5ff", "#caecff"] },
       "leave-orange": { "role": "signal", "displayName": "Leave Orange", "canonical": "oklch(67.6% 0.155 50.6)", "dark": "#ff9a56", "tonalRamp": ["#270000", "#4c0500", "#752300", "#9f4000", "#c5631c", "#e68b54", "#ffb383", "#ffdcb2"] },
       "work-teal": { "role": "signal", "displayName": "Work Teal", "canonical": "oklch(58.5% 0.099 230.1)", "dark": "#5ab4d6", "tonalRamp": ["#000e20", "#002a41", "#004966", "#0f6a8c", "#3d8cb0", "#6bafd0", "#97d3f0", "#c4f7ff"] },
+      "online-green": { "role": "signal", "displayName": "Online Green", "canonical": "oklch(74.6% 0.181 152.3)", "dark": "#2ecc71", "tonalRamp": ["#001500", "#003500", "#00560d", "#007a29", "#009e4b", "#49c074", "#80e29e", "#b2ffc9"] },
+      "unread-orange": { "role": "signal", "displayName": "Unread Orange", "canonical": "oklch(78.4% 0.159 73.0)", "dark": "#f5a623", "tonalRamp": ["#220000", "#451400", "#6b3000", "#934e00", "#b77000", "#d79634", "#f8bd6e", "#ffe4a1"] },
       "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(100.0% 0.000 89.9)", "dark": "#1e2126", "tonalRamp": ["#0b0b0b", "#252525", "#424242", "#616161", "#828282", "#a5a5a5", "#c9c9c9", "#eeeeee"] },
       "neutral-bg": { "role": "neutral", "displayName": "Neutral Canvas", "canonical": "oklch(97.3% 0.003 264.5)", "dark": "#14161a", "tonalRamp": ["#0b0b0c", "#242526", "#414243", "#606163", "#818284", "#a4a5a6", "#c8c9ca", "#eeeef0"] },
       "border": { "role": "neutral", "displayName": "Border", "canonical": "oklch(91.8% 0.006 264.5)", "dark": "#2c2f36", "tonalRamp": ["#0a0b0d", "#242527", "#414245", "#606164", "#818286", "#a3a5a8", "#c8c9cc", "#edeef1"] },
@@ -19,13 +21,16 @@
     "typographyMeta": {
       "headline": { "displayName": "Headline", "purpose": "The login screen's title — the only page-level headline in the app." },
       "title": { "displayName": "Title", "purpose": "Section and modal headers (panel headers, chat header, modal titles)." },
-      "body": { "displayName": "Body", "purpose": "Default UI text — buttons, list rows, form inputs, message text." },
-      "label": { "displayName": "Label", "purpose": "Badges, meta/timestamp text, hints, table column headers." }
+      "subtitle": { "displayName": "Subtitle", "purpose": "Login subtext, form inputs, and compact section sub-headers (calendar/list panel titles, Excel section headings)." },
+      "body": { "displayName": "Body", "purpose": "Default UI text — buttons, list rows, message text." },
+      "label": { "displayName": "Label", "purpose": "Emphasized micro-text — table column headers, admin sub-group headings." },
+      "caption": { "displayName": "Caption", "purpose": "The smallest tier — badge text, meta/timestamp lines, calendar weekday labels." }
     },
     "shadows": [
       { "name": "floating-panel", "value": "0 4px 16px rgba(0, 0, 0, 0.18)", "purpose": "Reaction picker and @-mention autocomplete dropdown — the only resting-shadow surfaces in the system." },
       { "name": "knob-lift", "value": "0 1px 2px rgba(0, 0, 0, 0.25)", "purpose": "The visibility-toggle switch's sliding knob." },
-      { "name": "modal-scrim", "value": "rgba(0, 0, 0, 0.45)", "purpose": "Full-viewport dimming background behind a modal; the modal card itself stays flat/bordered, not shadowed." }
+      { "name": "modal-scrim", "value": "rgba(0, 0, 0, 0.45)", "purpose": "Full-viewport dimming background behind a modal; the modal card itself stays flat/bordered, not shadowed." },
+      { "name": "sidebar-scrim", "value": "rgba(0, 0, 0, 0.35)", "purpose": "Lighter backdrop behind the off-canvas sidebar drawer below 1024px — a navigation surface, not an interrupting one, so it dims less than the modal scrim." }
     ],
     "motion": [
       { "name": "standard-ease", "value": "0.2s ease", "purpose": "The single transition timing used everywhere: toggle switch, sidebar slide-in, toast enter/exit." }
@@ -130,7 +135,8 @@
       "Do draw every surface edge with the shared 1px neutral border, not a shadow.",
       "Do reserve box-shadow for floating/transient layers (pickers, dropdowns, the modal scrim) — never on a resting card, panel, or button.",
       "Do add any new color to both the light and dark theme blocks together; this system has no color that exists in only one mode.",
-      "Do use the full pill radius (999px) for anything that represents a count, status, or tag, and 8–10px for containers/controls."
+      "Do use the full pill radius (999px) for anything that represents a count, status, or tag, and 8–10px for containers/controls.",
+      "Do theme scrollbars (and any other browser-default surface — focus rings, selection color) from the existing palette rather than leaving them unstyled or inventing a new color for them."
     ],
     "donts": [
       "Don't add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, and the mention-autocomplete list currently define hover feedback.",

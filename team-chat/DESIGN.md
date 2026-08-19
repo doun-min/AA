@@ -8,6 +8,8 @@ colors:
   mention-indigo: "#3554d1"
   leave-orange: "#e0762e"
   work-teal: "#2e86ab"
+  online-green: "#2ecc71"
+  unread-orange: "#f5a623"
   surface: "#ffffff"
   neutral-bg: "#f5f6f8"
   border: "#e2e4e8"
@@ -26,6 +28,12 @@ typography:
     fontWeight: 700
     lineHeight: 1.3
     letterSpacing: "normal"
+  subtitle:
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.3
+    letterSpacing: "normal"
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif"
     fontSize: "13px"
@@ -38,7 +46,15 @@ typography:
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "0.03em"
+  caption:
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Malgun Gothic', sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.3
+    letterSpacing: "normal"
 rounded:
+  2xs: "4px"
+  xs: "6px"
   sm: "8px"
   md: "10px"
   lg: "12px"
@@ -139,6 +155,8 @@ Mostly neutral grayscale with one blue action accent and a small set of role-spe
 - **Mention Indigo** (`#3554d1` light / `#ffd166` dark, paired with `#ffffff`/`#1a1200` text): the inline highlight for an `@nickname` mention inside a message body (distinct from `@전체`, which uses Alert Coral instead).
 - **Leave Orange** (`#e0762e` light / `#ff9a56` dark): schedule calendar dot/bar for 연차 (annual leave) and 반차 (half-day leave) entries.
 - **Work Teal** (`#2e86ab` light / `#5ab4d6` dark): schedule calendar dot/bar for 업무일정 (work-schedule) entries.
+- **Online Green** (`#2ecc71`, same value in both themes): the single "online" state — the filled dot next to a nickname anywhere a person's connection status is shown (active-users rows, the 1:1 people list, admin/user-management rows). The offline counterpart is just `{colors.text-muted}`, not a distinct color.
+- **Unread Orange** (`#f5a623`, same value in both themes): the small "안읽음" (unread) marker text on a message a recipient hasn't seen yet — deliberately different from Alert Coral so a per-message unread marker doesn't compete visually with the room-level unread count badge.
 
 ## Typography
 
@@ -149,11 +167,15 @@ Mostly neutral grayscale with one blue action accent and a small set of role-spe
 ### Hierarchy
 - **Headline** (700, 22px, line-height 1.3): the login screen's title — the only page-level headline in the app.
 - **Title** (700, 16px, line-height 1.3): section and modal headers (`panel-header h2`, `chat-header h1`, `modal-header h2`).
-- **Body** (400, 13–14px, line-height 1.4): default UI text — buttons, list rows, form inputs, message text.
-- **Label** (600, 11–12px, sometimes uppercase with 0.03em tracking): badges, meta/timestamp text, hints, and table column headers.
+- **Subtitle** (400, 14px, line-height 1.3): a step down from Title — the login screen's subtext, form inputs, and compact section sub-headers (calendar/list panel titles, the Excel page's section headings).
+- **Body** (400, 13px, line-height 1.4): default UI text — buttons, list rows, message text.
+- **Label** (600, 12px, sometimes uppercase with 0.03em tracking): emphasized micro-text — table column headers, admin sub-group headings.
+- **Caption** (400, 11px, line-height 1.3): the smallest tier — badge text, meta/timestamp lines, calendar weekday labels; bumped to 700 for the same emphasis cases the Two-Weight Rule covers (unread markers, count badges).
+
+Two sizes sit outside this text hierarchy on purpose: **18px** marks icon-sized glyphs (☰ sidebar toggle, × modal close, the 🔓/🔒 room-visibility icon) rather than a reading-text step, and **15px** is a single intentional one-off on the drag-and-drop overlay prompt. Neither should be reused as a general text size.
 
 ### Named Rules
-**The Two-Weight Rule.** Text is either regular body weight or bumped to 600–700 for emphasis (names, titles, badges) — there is no intermediate 500 weight anywhere in the system.
+**The Two-Weight Rule.** Text is either regular weight or bumped to 600–700 for emphasis (names, titles, badges) — there is no intermediate 500 weight anywhere in the system.
 
 ## Layout
 
@@ -165,11 +187,12 @@ Content is centered in role-specific max-widths rather than one global container
 
 ## Elevation & Depth
 
-Flat by default — panels, cards, buttons, and inputs carry no shadow at all; a 1px border does all the work of separating a surface from its background (see the Border-Not-Shadow Rule). Shadow is reserved for layers that float above the page and must read as temporary: the emoji reaction picker, the @-mention autocomplete dropdown, and the modal backdrop scrim. The toggle-switch knob carries a hairline shadow of its own for the same reason — it's the one control that visibly lifts off its track.
+Flat by default — panels, cards, buttons, and inputs carry no shadow at all; a 1px border does all the work of separating a surface from its background (see the Border-Not-Shadow Rule). Shadow is reserved for layers that float above the page and must read as temporary: the emoji reaction picker, the @-mention autocomplete dropdown, and the modal/sidebar backdrop scrims. The toggle-switch knob carries a hairline shadow of its own for the same reason — it's the one control that visibly lifts off its track.
 
 ### Shadow Vocabulary
 - **Floating panel** (`box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18)`): reaction picker, @-mention autocomplete dropdown.
 - **Modal scrim** (`background: rgba(0, 0, 0, 0.45)`, full-viewport overlay, no shadow on the modal card itself — the card stays flat/bordered like everything else): the dimming layer behind any modal.
+- **Sidebar scrim** (`background: rgba(0, 0, 0, 0.35)`): the lighter backdrop behind the off-canvas sidebar drawer below 1024px — deliberately less opaque than the modal scrim since the drawer is a navigation surface, not an interrupting one.
 - **Knob lift** (`box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)`): the visibility-toggle switch's sliding knob.
 
 ### Named Rules
@@ -177,7 +200,9 @@ Flat by default — panels, cards, buttons, and inputs carry no shadow at all; a
 
 ## Shapes
 
-Four radius steps, applied by role rather than by component size:
+Six radius steps, applied by role rather than by component size:
+- **4px** — the smallest interactive glyphs: reaction/delete icon buttons on a message, the inline `@mention` highlight.
+- **6px** — compact interactive rows one step down from a full control: calendar day cells, @-mention autocomplete rows.
 - **8px** — controls: buttons, inputs, room-list items, sidebar nav links.
 - **10px** — containers: panels, cards, modals, the auth card.
 - **12px** — chat message bubbles and inline image previews.
@@ -222,6 +247,13 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Deleted messages:** italic, `{colors.text-muted}` text, background stripped to transparent regardless of sender.
 - **Inline mentions:** `@nickname` gets Mention Indigo bg + white text, bold, 4px radius; the reserved `@전체` mention-all instead uses Alert Coral, so a mention-everyone message is visually distinct from a targeted one.
 
+### Scrollbars (signature interaction)
+- Every scrollable area in the app (message list, room/people lists, modals, the sidebar, dropdowns) uses one themed, overlay-style scrollbar instead of the browser default — this is deliberate per the craft floor's rule that browser-default surfaces still carry the design.
+- **At rest:** fully transparent — invisible, matching the flat/no-chrome character of the rest of the system.
+- **While scrolling or hovering the region:** a thin (6px), fully pill-rounded (999px) thumb fades in at `{colors.text}` reduced to ~22% opacity (`--scrollbar-thumb`), strengthening to ~40% opacity on direct thumb-hover (`--scrollbar-thumb-strong`). No new hue — it's the existing Text color at low opacity, the same restraint as everywhere else in the palette.
+- **Timing:** the thumb fades using the same 0.2s ease transition as every other state change in the system (see the Two-Weight-adjacent single-timing convention in Elevation). It reappears immediately on scroll and holds for ~900ms of inactivity before fading back out — modeled on KakaoTalk's chat-room scrollbar.
+- Implemented via themed `::-webkit-scrollbar` pseudo-elements plus a small global scroll listener (`scrollbars.js`) that toggles an `.is-scrolling` class; Firefox gets the same colors through `scrollbar-color` without the fade (an accepted platform limitation, not a redesign).
+
 ### Calendar Cell (signature component)
 - Day cells show small colored dots (Leave Orange / Work Teal) for entries on that day, plus a bar that visually spans from a range's start cell to its end cell (achieved with negative margins so adjacent-day bars touch with no gap).
 - The "today" cell gets a `{colors.neutral-bg}` fill and bold date; a user-selected cell instead gets a `{colors.signal-blue}` border.
@@ -234,6 +266,7 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Do** reserve box-shadow for floating/transient layers (pickers, dropdowns, the modal scrim) — never on a resting card, panel, or button.
 - **Do** add any new color to both the light and dark theme blocks together; this system has no color that exists in only one mode.
 - **Do** use the full pill radius (999px) for anything that represents a count, status, or tag, and 8–10px for containers/controls.
+- **Do** theme scrollbars (and any other browser-default surface — focus rings, selection color) from the existing palette rather than leaving them unstyled or inventing a new color for them.
 
 ### Don't:
 - **Don't** add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, and the mention-autocomplete list currently define hover feedback.
