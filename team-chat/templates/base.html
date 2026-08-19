@@ -30,12 +30,14 @@
       채팅
       <span class="badge-count" id="sidebar-unread-badge" data-count="{{ sidebar_unread_total|default(0) }}" {% if not sidebar_unread_total %}hidden{% endif %}>{{ sidebar_unread_total|default(0) }}</span>
     </a>
-    <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.schedule_page' else '' }}"
-       href="{{ url_for('pages.schedule_page') }}">일정 관리</a>
     <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.excel_page' else '' }}"
        href="{{ url_for('pages.excel_page') }}">엑셀 변환</a>
     <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.defect_page' else '' }}"
        href="{{ url_for('pages.defect_page') }}">이슈 공유</a>
+    {% if is_admin %}
+    <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.admin_page' else '' }}"
+       href="{{ url_for('pages.admin_page') }}">관리자</a>
+    {% endif %}
   </nav>
   <button type="button" id="theme-toggle" class="sidebar-theme-toggle">🌙 다크모드</button>
 </aside>

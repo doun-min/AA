@@ -10,10 +10,10 @@
   <form method="post" action="{{ url_for('pages.logout') }}"><button class="btn-ghost" type="submit">나가기</button></form>
 </div>
 
-<div class="layout{% if is_admin %} has-admin{% endif %}">
+<div class="layout">
   <section class="panel layout-rooms">
     <div class="panel-header"><h2>채팅방</h2></div>
-    <button type="button" id="btn-open-create-room" class="btn-secondary">+ 방 만들기</button>
+    <button type="button" id="btn-open-create-room" class="btn-primary">+ 방 만들기</button>
     <ul class="room-list" id="group-room-list">
       {% for room in group_rooms %}
       <li class="room-item">
@@ -54,54 +54,92 @@
     </ul>
   </section>
 
-  {% if is_admin %}
-  <section class="panel layout-admin">
-    <div class="panel-header"><h2>관리자</h2></div>
-    <div class="admin-panel">
-      <div class="admin-panel-group">
-        <h3>관리자 관리</h3>
-        <ul class="room-list" id="admin-list">
-          {% for user in admin_list %}
-          <li class="room-item" data-nickname="{{ user.nickname }}">
-            <span class="room-name">
-              <span class="status-dot {{ 'online' if user.online else 'offline' }}"></span>
-              {{ user.nickname }}{% if user.is_self %} (나){% endif %}
-            </span>
-            {% if not user.is_self %}
-            <button class="btn-danger btn-demote-admin" data-nickname="{{ user.nickname }}">해제</button>
-            {% endif %}
-          </li>
-          {% endfor %}
-        </ul>
-        <div class="member-invite-row">
-          <select id="promote-admin-select">
-            <option value="">관리자로 지정할 사용자 선택</option>
-            {% for u in manageable_users %}<option value="{{ u.nickname }}">{{ '🟢' if u.online else '⚪' }} {{ u.nickname }}</option>{% endfor %}
-          </select>
-          <button type="button" id="btn-promote-admin" class="btn-secondary">관리자 지정</button>
+  <section class="layout-schedule">
+    <div class="sched-embed">
+      <div class="sched-calendar">
+        <div class="sched-cal-header">
+          <button type="button" id="sched-prev-month" class="btn-ghost">&lsaquo;</button>
+          <span id="sched-cal-title" class="sched-cal-title"></span>
+          <button type="button" id="sched-next-month" class="btn-ghost">&rsaquo;</button>
         </div>
-        <p id="admin-manage-error" class="error"></p>
+        <div class="sched-cal-weekdays">
+          <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+        </div>
+        <div id="sched-cal-grid" class="sched-cal-grid"></div>
+        <div class="sched-legend">
+          <span class="sched-legend-item"><i class="sched-dot sched-dot-leave"></i>연차/반차</span>
+          <span class="sched-legend-item"><i class="sched-dot sched-dot-work"></i>업무일정</span>
+        </div>
       </div>
 
-      <div class="admin-panel-group">
-        <h3>사용자 관리</h3>
-        <ul class="room-list" id="manageable-users-list">
-          {% for user in manageable_users %}
-          <li class="room-item" data-nickname="{{ user.nickname }}">
-            <span class="room-name">
-              <span class="status-dot {{ 'online' if user.online else 'offline' }}"></span>
-              {{ user.nickname }}
-            </span>
-            <button class="btn-danger btn-delete-user" data-nickname="{{ user.nickname }}">계정 삭제</button>
-          </li>
-          {% endfor %}
-          {% if not manageable_users %}<li class="empty">삭제할 수 있는 사용자가 없습니다.</li>{% endif %}
-        </ul>
+      <div class="sched-list-panel">
+        <div class="sched-list-header">
+          <span id="sched-list-title" class="sched-list-title"></span>
+          <button type="button" id="sched-add-btn" class="btn-secondary">+ 일정 추가</button>
+        </div>
+        <ul id="sched-list" class="sched-list"></ul>
       </div>
     </div>
   </section>
-  {% endif %}
 </div>
+</div>
+
+<div id="sched-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="sched-modal-title">일정 추가</h2>
+      <button type="button" class="modal-close" id="sched-modal-close">&times;</button>
+    </div>
+    <form id="sched-form" class="modal-body">
+      <input type="hidden" id="sched-form-id">
+      <label>구분
+        <select id="sched-category">
+          <option value="annual">연차</option>
+          <option value="half_day">반차</option>
+          <option value="work">업무일정</option>
+        </select>
+      </label>
+
+      <label>시작 일자
+        <div class="sched-date-selects">
+          <select id="sched-start-year"></select>년
+          <select id="sched-start-month"></select>월
+          <select id="sched-start-day"></select>일
+        </div>
+      </label>
+      <div id="sched-start-time-row" class="sched-time-row" hidden>
+        <span class="sched-time-label">시작 시간</span>
+        <div class="sched-time-selects">
+          <select id="sched-start-hour"></select> :
+          <select id="sched-start-minute"></select>
+        </div>
+      </div>
+
+      <label>종료 일자
+        <div class="sched-date-selects">
+          <select id="sched-end-year"></select>년
+          <select id="sched-end-month"></select>월
+          <select id="sched-end-day"></select>일
+        </div>
+      </label>
+      <div id="sched-end-time-row" class="sched-time-row" hidden>
+        <span class="sched-time-label">종료 시간</span>
+        <div class="sched-time-selects">
+          <select id="sched-end-hour"></select> :
+          <select id="sched-end-minute"></select>
+        </div>
+      </div>
+
+      <label>내용 <input type="text" id="sched-title" maxlength="100" placeholder="일정 내용 (연차/반차는 생략 가능)"></label>
+      <p id="sched-error" class="error"></p>
+      <div class="modal-actions">
+        <button type="button" id="sched-delete-btn" class="btn-danger" hidden>삭제</button>
+        <span class="spacer"></span>
+        <button type="button" id="sched-cancel-btn" class="btn-ghost">취소</button>
+        <button type="submit" class="btn-secondary">저장</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div id="create-room-modal" class="modal-overlay" hidden>
@@ -146,4 +184,5 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/rooms.js') }}"></script>
+<script src="{{ url_for('static', filename='js/schedule.js') }}"></script>
 {% endblock %}

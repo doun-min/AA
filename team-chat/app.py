@@ -2,6 +2,7 @@ import os
 
 from flask import Flask, session
 
+import auth
 import config
 import db
 from extensions import socketio
@@ -33,12 +34,14 @@ def create_app():
     app.register_blueprint(issues_bp)
 
     @app.context_processor
-    def inject_sidebar_counts():
+    def inject_sidebar_context():
+        # 사이드바(관리자 메뉴 노출 여부 포함)는 모든 페이지에서 공통으로 쓰이므로,
+        # 각 라우트가 매번 is_admin을 넘기지 않아도 되도록 여기서 한 번에 주입한다.
         nickname = session.get("nickname")
         if not nickname:
             return {}
         total = sum(db.get_unread_message_counts(nickname).values())
-        return {"sidebar_unread_total": total}
+        return {"sidebar_unread_total": total, "is_admin": auth.is_admin(nickname)}
 
     socketio.init_app(app, async_mode="threading")
 

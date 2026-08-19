@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}관리자{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="topbar-user"><strong>{{ nickname }}</strong> <span class="badge badge-admin">관리자</span></div>
+  <a class="btn-ghost" href="{{ url_for('pages.rooms_page') }}">채팅으로 이동</a>
+</div>
+
+<div class="admin-page">
+  <div class="admin-panel">
+    <div class="admin-panel-group">
+      <h3>관리자 관리</h3>
+      <ul class="room-list" id="admin-list">
+        {% for user in admin_list %}
+        <li class="room-item" data-nickname="{{ user.nickname }}">
+          <span class="room-name">
+            <span class="status-dot {{ 'online' if user.online else 'offline' }}"></span>
+            {{ user.nickname }}{% if user.is_self %} (나){% endif %}
+          </span>
+          {% if not user.is_self %}
+          <button class="btn-danger btn-demote-admin" data-nickname="{{ user.nickname }}">해제</button>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="member-invite-row">
+        <select id="promote-admin-select">
+          <option value="">관리자로 지정할 사용자 선택</option>
+          {% for u in manageable_users %}<option value="{{ u.nickname }}">{{ '🟢' if u.online else '⚪' }} {{ u.nickname }}</option>{% endfor %}
+        </select>
+        <button type="button" id="btn-promote-admin" class="btn-secondary">관리자 지정</button>
+      </div>
+      <p id="admin-manage-error" class="error"></p>
+    </div>
+
+    <div class="admin-panel-group">
+      <h3>사용자 관리</h3>
+      <ul class="room-list" id="manageable-users-list">
+        {% for user in manageable_users %}
+        <li class="room-item" data-nickname="{{ user.nickname }}">
+          <span class="room-name">
+            <span class="status-dot {{ 'online' if user.online else 'offline' }}"></span>
+            {{ user.nickname }}
+          </span>
+          <button class="btn-danger btn-delete-user" data-nickname="{{ user.nickname }}">계정 삭제</button>
+        </li>
+        {% endfor %}
+        {% if not manageable_users %}<li class="empty">삭제할 수 있는 사용자가 없습니다.</li>{% endif %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

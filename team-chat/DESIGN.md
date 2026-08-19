@@ -3,6 +3,7 @@ name: TeamChat
 description: Internal LAN team hub for chat, QA defect tracking, schedule, and Excel tools
 colors:
   signal-blue: "#4f6df5"
+  signal-blue-hover: "#3b53d9"
   alert-coral: "#e05252"
   mention-amber: "#fff3cd"
   mention-indigo: "#3554d1"
@@ -71,6 +72,11 @@ components:
     textColor: "#ffffff"
     rounded: "{rounded.sm}"
     padding: "10px 16px"
+  button-primary-hover:
+    backgroundColor: "{colors.signal-blue-hover}"
+    textColor: "#ffffff"
+    rounded: "{rounded.sm}"
+    padding: "10px 16px"
   button-secondary:
     backgroundColor: "{colors.neutral-bg}"
     textColor: "{colors.text}"
@@ -135,7 +141,8 @@ The system is fully dark-mode mirrored via a `data-theme` attribute the user tog
 Mostly neutral grayscale with one blue action accent and a small set of role-specific signal colors (danger, mention, and two schedule-category colors); no secondary or tertiary brand accent exists.
 
 ### Primary
-- **Signal Blue** (`#4f6df5` light / `#6b85ff` dark — `oklch(58.9% 0.206 269.6)`): the one primary-action color. Used only on the send/submit button, the active sidebar nav link, "my" chat bubble, and the checked state of the visibility toggle. Its rarity is deliberate — see the Named Rule below.
+- **Signal Blue** (`#4f6df5` light / `#6b85ff` dark — `oklch(58.9% 0.206 269.6)`): the one primary-action color. Used only on the send/submit button, the "+ 방 만들기" create-room button, the active sidebar nav link, "my" chat bubble, and the checked state of the visibility toggle. Its rarity is deliberate — see the Named Rule below.
+- **Signal Blue Hover** (`#3b53d9` light / `#829fff` dark — one step deeper in light mode, one step lighter in dark mode along the same hue/chroma): the `.btn-primary` hover state only. This is the one deliberate exception to "no hover anywhere" — see Components > Buttons.
 
 ### Neutral
 - **Surface** (`#ffffff` light / `#1e2126` dark): panel, card, modal, and auth-card backgrounds — the "raised" layer.
@@ -181,9 +188,11 @@ Two sizes sit outside this text hierarchy on purpose: **18px** marks icon-sized 
 
 The app shell is a sidebar + content pattern. Below 1024px the sidebar (240px) is an off-canvas drawer with a scrim backdrop, toggled by a fixed top-left button; at 1024px and above it becomes an always-visible fixed left rail — a deliberate "desktop app / internal system" tone rather than a marketing-site responsive collapse.
 
-Content is centered in role-specific max-widths rather than one global container: 1100px for the rooms grid and full-width tool pages (schedule/excel), 900px for the chat thread, 1200px for the issue/defect table, and 560px for narrow single-column pages. The room-list panels use an auto-fit card grid (`minmax(260px, 1fr)`) so panel count adapts to width without a breakpoint.
+Content is centered in role-specific max-widths rather than one global container: 1100px for the rooms dashboard, 900px for the chat thread, 1200px for the issue/defect table, 900px for the admin page, and 560px for narrow single-column pages (excel).
 
-**Spacing rhythm:** primarily 8 / 12 / 16 / 24px, with 4px for the tightest gaps (icon-to-label) and 6/10/14/20px as one-off in-between values inside dense rows (form fields, list items). A second breakpoint at 720px collapses the two-column schedule/excel layout to one column and tightens the issue table's cell max-width.
+The rooms dashboard is the one page with a genuine multi-region grid: 채팅방 (rooms) and 1:1 대화 (people) sit side by side in the top row, and a full-width row below holds the schedule widget (its own calendar + list two-column sub-grid, `minmax(260px, 340px) 1fr`) — so a person's daily view (rooms, people, calendar) loads in one place instead of three separate pages. The room/people lists scroll internally; the schedule widget doesn't need to since its own list is already height-capped.
+
+**Spacing rhythm:** primarily 8 / 12 / 16 / 24px, with 4px for the tightest gaps (icon-to-label) and 6/10/14/20px as one-off in-between values inside dense rows (form fields, list items). A second breakpoint (720px for excel, 1023px for the rooms dashboard) collapses multi-column layouts to one column.
 
 ## Elevation & Depth
 
@@ -213,12 +222,12 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 ## Components
 
 ### Buttons
-- **Shape:** 8px radius; all variants (secondary/danger/ghost) keep a 1px border, including ghost — only its background drops to transparent.
-- **Primary** (`{colors.signal-blue}` bg, white text, no border, padding `10px 16px`, weight 600): the single call-to-action per screen — send message, log in.
-- **Secondary** (`{colors.neutral-bg}` bg, `{colors.text}` text, bordered): the default button for most actions (create room, save, add).
+- **Shape:** 8px radius; all variants (secondary/danger/ghost) keep a 1px border, including ghost — only its background drops to transparent. `.btn-primary` has no border (its fill is the edge).
+- **Primary** (`{colors.signal-blue}` bg, white text, no border, padding `10px 16px`, weight 600): the single call-to-action per screen — send message, log in, "+ 방 만들기" (create room). Reserve it for the one thing a screen most wants the visitor to do; everything else on that screen stays secondary/ghost/danger (The One Accent Rule).
+- **Secondary** (`{colors.neutral-bg}` bg, `{colors.text}` text, bordered): the default button for most actions (save, add, "+ 일정 추가").
 - **Danger** (`{colors.alert-coral}` bg + border, white text): destructive actions only (delete room/message/user, demote admin).
 - **Ghost** (transparent bg, bordered, `{colors.text}` text): tertiary/cancel actions, and links styled as buttons (e.g. "다크모드").
-- **Hover / Focus:** none defined. No button variant has a hover or focus-visible treatment in the current system — they rely on the pointer cursor alone. Don't assume one exists when extending a button.
+- **Hover / Focus:** `.btn-primary` is the one button variant with a hover state — it deepens to `{colors.signal-blue-hover}` over 0.2s ease, color only, no shadow or movement. Every other button/panel/list row still has none; don't assume one exists elsewhere when extending a button.
 
 ### Badges & Pills
 - **Status badge:** pill, muted `{colors.border}` bg + `{colors.text-muted}` text; the admin-role variant swaps to solid Alert Coral + white.
@@ -269,6 +278,6 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Do** theme scrollbars (and any other browser-default surface — focus rings, selection color) from the existing palette rather than leaving them unstyled or inventing a new color for them.
 
 ### Don't:
-- **Don't** add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, and the mention-autocomplete list currently define hover feedback.
+- **Don't** add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, the mention-autocomplete list, and `.btn-primary` currently define hover feedback.
 - **Don't** introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.
 - **Don't** give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional (see PRODUCT.md's Positioning and Evidence on Hand).

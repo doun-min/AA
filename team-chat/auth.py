@@ -1,7 +1,7 @@
 import threading
 from functools import wraps
 
-from flask import redirect, session, url_for
+from flask import abort, redirect, session, url_for
 
 import db
 
@@ -53,6 +53,19 @@ def login_required(view):
     def wrapped(*args, **kwargs):
         if not session.get("nickname"):
             return redirect(url_for("pages.login_page"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        nickname = session.get("nickname")
+        if not nickname:
+            return redirect(url_for("pages.login_page"))
+        if not is_admin(nickname):
+            abort(403)
         return view(*args, **kwargs)
 
     return wrapped

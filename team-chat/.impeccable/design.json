@@ -5,6 +5,7 @@
   "extensions": {
     "colorMeta": {
       "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "oklch(58.9% 0.206 269.6)", "dark": "#6b85ff", "tonalRamp": ["#060041", "#0f0e6d", "#22309c", "#3950ce", "#5675f5", "#7a9cff", "#a2c3ff", "#cbebff"] },
+      "signal-blue-hover": { "role": "primary", "displayName": "Signal Blue Hover", "canonical": "oklch(50.9% 0.206 269.6)", "dark": "#829fff", "tonalRamp": ["#060041", "#0f0e6d", "#22309c", "#3950ce", "#5675f5", "#7a9cff", "#a2c3ff", "#cbebff"] },
       "alert-coral": { "role": "signal", "displayName": "Alert Coral", "canonical": "oklch(62.9% 0.178 23.7)", "dark": "#ff6b6b", "tonalRamp": ["#2c0000", "#540000", "#7f0415", "#ac282e", "#d44f4f", "#f57b76", "#ffa69f", "#ffd0ca"] },
       "mention-amber": { "role": "signal", "displayName": "Mention Amber", "canonical": "oklch(96.4% 0.051 92.6)", "dark": "#4a3c00", "tonalRamp": ["#100a00", "#2b250e", "#4a4127", "#6b6141", "#8c8261", "#aea587", "#d2c9ae", "#f6eed6"] },
       "mention-indigo": { "role": "signal", "displayName": "Mention Indigo", "canonical": "oklch(50.1% 0.196 267.8)", "dark": "#ffd166", "tonalRamp": ["#04003f", "#0b136a", "#1e3398", "#3553c9", "#5377f0", "#789eff", "#a0c5ff", "#caecff"] },
@@ -45,9 +46,9 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The single call-to-action per screen — send message, log in. No hover/focus treatment is defined in the source.",
-      "html": "<button class=\"ds-btn-primary\">보내기</button>",
-      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-text); border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Malgun Gothic\", sans-serif; font-size: 13px; cursor: pointer; }"
+      "description": "The single call-to-action per screen — send message, log in, create room. The only button variant with a hover state in the whole system.",
+      "html": "<button class=\"ds-btn-primary\">+ 방 만들기</button>",
+      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-text); border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Malgun Gothic\", sans-serif; font-size: 13px; cursor: pointer; transition: background-color 0.2s ease; } .ds-btn-primary:hover { background: var(--primary-hover); }"
     },
     {
       "name": "Secondary Button",
@@ -139,7 +140,7 @@
       "Do theme scrollbars (and any other browser-default surface — focus rings, selection color) from the existing palette rather than leaving them unstyled or inventing a new color for them."
     ],
     "donts": [
-      "Don't add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, and the mention-autocomplete list currently define hover feedback.",
+      "Don't add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, the mention-autocomplete list, and .btn-primary currently define hover feedback.",
       "Don't introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.",
       "Don't give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional."
     ]
