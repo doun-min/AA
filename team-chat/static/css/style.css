@@ -205,7 +205,7 @@ button { font-family: inherit; }
    유일하게 hover가 있는 버튼이라, 짙어지는 색만으로(그림자/이동 없이) 상태를 알려준다. */
 .btn-primary {
   background: var(--primary); border-color: var(--primary); color: var(--primary-text);
-  font-weight: 600; padding: 10px 16px; transition: background-color 0.2s ease, border-color 0.2s ease;
+  font-weight: 600; align-self: flex-start; transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
 .btn-secondary[hidden], .btn-danger[hidden], .btn-ghost[hidden], .btn-primary[hidden] { display: none; }
@@ -373,7 +373,9 @@ button { font-family: inherit; }
    열 간격(column-gap)은 0으로 두고, 주 사이 구분은 row-gap으로만 준다. */
 .sched-cal-grid { column-gap: 0; row-gap: 2px; }
 .sched-cal-cell {
-  min-height: 64px; border-radius: 6px; border: 1px solid transparent; padding: 4px;
+  /* 첫 화면 대시보드에 얹힌 위젯이라 전용 페이지였을 때보다 훨씬 작게 잡는다 —
+     64px였을 땐 캘린더 한 칸이 채팅방/1:1대화 행을 짓눌러 그리드가 깨지는 느낌이었다. */
+  min-height: 42px; border-radius: 6px; border: 1px solid transparent; padding: 4px;
   font-size: 11px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
   overflow: hidden;
 }

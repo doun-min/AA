@@ -71,12 +71,12 @@ components:
     backgroundColor: "{colors.signal-blue}"
     textColor: "#ffffff"
     rounded: "{rounded.sm}"
-    padding: "10px 16px"
+    padding: "6px 12px"
   button-primary-hover:
     backgroundColor: "{colors.signal-blue-hover}"
     textColor: "#ffffff"
     rounded: "{rounded.sm}"
-    padding: "10px 16px"
+    padding: "6px 12px"
   button-secondary:
     backgroundColor: "{colors.neutral-bg}"
     textColor: "{colors.text}"
@@ -223,7 +223,7 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 
 ### Buttons
 - **Shape:** 8px radius; all variants (secondary/danger/ghost) keep a 1px border, including ghost — only its background drops to transparent. `.btn-primary` has no border (its fill is the edge).
-- **Primary** (`{colors.signal-blue}` bg, white text, no border, padding `10px 16px`, weight 600): the single call-to-action per screen — send message, log in, "+ 방 만들기" (create room). Reserve it for the one thing a screen most wants the visitor to do; everything else on that screen stays secondary/ghost/danger (The One Accent Rule).
+- **Primary** (`.btn-primary`: `{colors.signal-blue}` bg, white text, no border, padding `6px 12px` — same footprint as secondary/danger/ghost, weight 600, `align-self: flex-start` so it never stretches to its container's full width): the reusable primary button, currently just "+ 방 만들기" (create room). Reserve it for the one thing a screen most wants the visitor to do; everything else on that screen stays secondary/ghost/danger (The One Accent Rule). The send-message and login buttons are older, larger one-off instances of the same color (`10px 16px` / `10px` padding) predating this class — don't copy their sizing for a new primary button, use `.btn-primary`.
 - **Secondary** (`{colors.neutral-bg}` bg, `{colors.text}` text, bordered): the default button for most actions (save, add, "+ 일정 추가").
 - **Danger** (`{colors.alert-coral}` bg + border, white text): destructive actions only (delete room/message/user, demote admin).
 - **Ghost** (transparent bg, bordered, `{colors.text}` text): tertiary/cancel actions, and links styled as buttons (e.g. "다크모드").
@@ -266,6 +266,7 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 ### Calendar Cell (signature component)
 - Day cells show small colored dots (Leave Orange / Work Teal) for entries on that day, plus a bar that visually spans from a range's start cell to its end cell (achieved with negative margins so adjacent-day bars touch with no gap).
 - The "today" cell gets a `{colors.neutral-bg}` fill and bold date; a user-selected cell instead gets a `{colors.signal-blue}` border.
+- **Sizing:** cells are compact by design (`min-height: 42px`) — this calendar always shares the rooms-dashboard row with 채팅방/1:1 대화, never a full page of its own, so it stays deliberately small rather than letting a 6-row month grid dominate the layout. Don't grow it back toward a standalone-calendar-app scale.
 
 ## Do's and Don'ts
 
@@ -281,3 +282,4 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Don't** add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, the mention-autocomplete list, and `.btn-primary` currently define hover feedback.
 - **Don't** introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.
 - **Don't** give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional (see PRODUCT.md's Positioning and Evidence on Hand).
+- **Don't** size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard (`.layout`'s `auto` schedule row sizes to content — a full-size calendar squeezed 채팅방/1:1 대화 down to almost nothing). Widgets sharing that grid should stay compact enough that every region stays usable.

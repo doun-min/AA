@@ -46,9 +46,9 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The single call-to-action per screen — send message, log in, create room. The only button variant with a hover state in the whole system.",
+      "description": "The reusable primary button — currently just \"+ 방 만들기\" (create room). Same compact footprint as secondary/danger/ghost, never stretched to fill its container. The only button variant with a hover state in the whole system.",
       "html": "<button class=\"ds-btn-primary\">+ 방 만들기</button>",
-      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-text); border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Malgun Gothic\", sans-serif; font-size: 13px; cursor: pointer; transition: background-color 0.2s ease; } .ds-btn-primary:hover { background: var(--primary-hover); }"
+      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-text); border: none; border-radius: 8px; padding: 6px 12px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Malgun Gothic\", sans-serif; font-size: 13px; cursor: pointer; align-self: flex-start; transition: background-color 0.2s ease; } .ds-btn-primary:hover { background: var(--primary-hover); }"
     },
     {
       "name": "Secondary Button",
@@ -142,7 +142,8 @@
     "donts": [
       "Don't add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, the mention-autocomplete list, and .btn-primary currently define hover feedback.",
       "Don't introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.",
-      "Don't give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional."
+      "Don't give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional.",
+      "Don't size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard — widgets sharing that grid should stay compact enough that every region stays usable."
     ]
   }
 }
