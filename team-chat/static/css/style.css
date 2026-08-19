@@ -113,11 +113,40 @@ body {
 .badge-count[hidden] { display: none; }
 
 /* layout / panels */
+/* 로그인 후 첫 화면(rooms.html)의 대시보드 그리드: 채팅방(주 업무 목록)이 왼쪽에서 두 행을
+   차지하고, 1:1 대화/접속자가 오른쪽에 쌓인다. 관리자일 때만 하단에 관리 영역이 한 행 추가된다.
+   각 목록은 패널 안에서만 스크롤되므로(.room-list flex:1) 목록이 아무리 길어도 페이지 전체가
+   늘어나지 않는다 — chat.html의 .messages 스크롤 영역과 같은 패턴이다. */
 .layout {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px; padding: 24px; max-width: 1100px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(280px, 1.3fr) minmax(240px, 1fr);
+  grid-template-rows: 1fr 1fr; grid-template-areas: "rooms direct" "rooms active";
+  gap: 16px; padding: 24px; max-width: 1100px; margin: 0 auto; width: 100%; box-sizing: border-box;
 }
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.layout.has-admin { grid-template-rows: 1fr 1fr auto; grid-template-areas: "rooms direct" "rooms active" "admin admin"; }
+.layout-rooms { grid-area: rooms; }
+.layout-direct { grid-area: direct; }
+.layout-active { grid-area: active; }
+.layout-admin { grid-area: admin; }
+
+@media (max-width: 1023px) {
+  .layout, .layout.has-admin {
+    grid-template-columns: 1fr; grid-template-rows: none;
+    grid-template-areas: "rooms" "direct" "active" "admin";
+  }
+}
+
+@media (min-width: 1024px) {
+  /* 사이드바가 고정 레일로 바뀌는 지점과 같은 기준(1024px)에서, 첫 화면 전체를
+     뷰포트 높이에 맞춰 페이지 스크롤 없이 한 화면에 담는다. */
+  .rooms-page { display: flex; flex-direction: column; height: 100vh; }
+  .rooms-page .layout { flex: 1; min-height: 0; overflow: hidden; }
+  .rooms-page .panel { min-height: 0; }
+  .rooms-page .layout-rooms > .room-list,
+  .rooms-page .layout-direct > .room-list,
+  .rooms-page .layout-active > .room-list { flex: 1; min-height: 0; overflow-y: auto; }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; }
 .panel-header h2 { margin: 0 0 12px; font-size: 16px; }
 .room-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .room-item {
@@ -397,6 +426,13 @@ button { font-family: inherit; }
   padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 20px;
 }
 .admin-panel-group { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+
+/* 첫 화면(rooms.html)에서는 관리자 관리/사용자 관리 두 그룹을 이미 .panel 카드 안에
+   합쳐 넣으므로, 카드 안에 또 카드가 겹쳐 보이지 않도록 .admin-panel 자체의 배경/테두리를
+   지운다. 각 그룹의 목록은 사용자가 아무리 많아도 페이지가 늘어나지 않도록 자체 스크롤한다. */
+.layout-admin .admin-panel { background: none; border: none; padding: 0; }
+.layout-admin .admin-panel-group { flex: 1; min-width: 240px; }
+.layout-admin .room-list { max-height: 220px; overflow-y: auto; }
 .admin-panel-group h3 { margin: 0; font-size: 13px; color: var(--text-muted); }
 .admin-panel-row { display: flex; gap: 6px; }
 .admin-panel-row input { flex: 1; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 13px; }
