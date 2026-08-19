@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-19T00:00:00Z",
+  "title": "Design System: TeamChat",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "oklch(58.9% 0.206 269.6)", "dark": "#6b85ff", "tonalRamp": ["#060041", "#0f0e6d", "#22309c", "#3950ce", "#5675f5", "#7a9cff", "#a2c3ff", "#cbebff"] },
+      "alert-coral": { "role": "signal", "displayName": "Alert Coral", "canonical": "oklch(62.9% 0.178 23.7)", "dark": "#ff6b6b", "tonalRamp": ["#2c0000", "#540000", "#7f0415", "#ac282e", "#d44f4f", "#f57b76", "#ffa69f", "#ffd0ca"] },
+      "mention-amber": { "role": "signal", "displayName": "Mention Amber", "canonical": "oklch(96.4% 0.051 92.6)", "dark": "#4a3c00", "tonalRamp": ["#100a00", "#2b250e", "#4a4127", "#6b6141", "#8c8261", "#aea587", "#d2c9ae", "#f6eed6"] },
+      "mention-indigo": { "role": "signal", "displayName": "Mention Indigo", "canonical": "oklch(50.1% 0.196 267.8)", "dark": "#ffd166", "tonalRamp": ["#04003f", "#0b136a", "#1e3398", "#3553c9", "#5377f0", "#789eff", "#a0c5ff", "#caecff"] },
+      "leave-orange": { "role": "signal", "displayName": "Leave Orange", "canonical": "oklch(67.6% 0.155 50.6)", "dark": "#ff9a56", "tonalRamp": ["#270000", "#4c0500", "#752300", "#9f4000", "#c5631c", "#e68b54", "#ffb383", "#ffdcb2"] },
+      "work-teal": { "role": "signal", "displayName": "Work Teal", "canonical": "oklch(58.5% 0.099 230.1)", "dark": "#5ab4d6", "tonalRamp": ["#000e20", "#002a41", "#004966", "#0f6a8c", "#3d8cb0", "#6bafd0", "#97d3f0", "#c4f7ff"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(100.0% 0.000 89.9)", "dark": "#1e2126", "tonalRamp": ["#0b0b0b", "#252525", "#424242", "#616161", "#828282", "#a5a5a5", "#c9c9c9", "#eeeeee"] },
+      "neutral-bg": { "role": "neutral", "displayName": "Neutral Canvas", "canonical": "oklch(97.3% 0.003 264.5)", "dark": "#14161a", "tonalRamp": ["#0b0b0c", "#242526", "#414243", "#606163", "#818284", "#a4a5a6", "#c8c9ca", "#eeeef0"] },
+      "border": { "role": "neutral", "displayName": "Border", "canonical": "oklch(91.8% 0.006 264.5)", "dark": "#2c2f36", "tonalRamp": ["#0a0b0d", "#242527", "#414245", "#606164", "#818286", "#a3a5a8", "#c8c9cc", "#edeef1"] },
+      "text": { "role": "neutral", "displayName": "Text", "canonical": "oklch(23.0% 0.012 264.3)", "dark": "#eef0f3", "tonalRamp": ["#090b0f", "#23252a", "#3f4248", "#5e6168", "#7f828a", "#a2a5ac", "#c6c9cf", "#eceef4"] },
+      "text-muted": { "role": "neutral", "displayName": "Text Muted", "canonical": "oklch(55.1% 0.023 264.4)", "dark": "#9aa0aa", "tonalRamp": ["#080b12", "#21252e", "#3d424d", "#5b616e", "#7c8290", "#9fa5b2", "#c3c9d5", "#e9eff9"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "The login screen's title — the only page-level headline in the app." },
+      "title": { "displayName": "Title", "purpose": "Section and modal headers (panel headers, chat header, modal titles)." },
+      "body": { "displayName": "Body", "purpose": "Default UI text — buttons, list rows, form inputs, message text." },
+      "label": { "displayName": "Label", "purpose": "Badges, meta/timestamp text, hints, table column headers." }
+    },
+    "shadows": [
+      { "name": "floating-panel", "value": "0 4px 16px rgba(0, 0, 0, 0.18)", "purpose": "Reaction picker and @-mention autocomplete dropdown — the only resting-shadow surfaces in the system." },
+      { "name": "knob-lift", "value": "0 1px 2px rgba(0, 0, 0, 0.25)", "purpose": "The visibility-toggle switch's sliding knob." },
+      { "name": "modal-scrim", "value": "rgba(0, 0, 0, 0.45)", "purpose": "Full-viewport dimming background behind a modal; the modal card itself stays flat/bordered, not shadowed." }
+    ],
+    "motion": [
+      { "name": "standard-ease", "value": "0.2s ease", "purpose": "The single transition timing used everywhere: toggle switch, sidebar slide-in, toast enter/exit." }
+    ],
+    "breakpoints": [
+      { "name": "collapse", "value": "720px" },
+      { "name": "sidebar-rail", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single call-to-action per screen — send message, log in. No hover/focus treatment is defined in the source.",
+      "html": "<button class=\"ds-btn-primary\">보내기</button>",
+      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-text); border: none; border-radius: 8px; padding: 10px 16px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Malgun Gothic\", sans-serif; font-size: 13px; cursor: pointer; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default button for most actions (create room, save, add).",
+      "html": "<button class=\"ds-btn-secondary\">저장</button>",
+      "css": ".ds-btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-family: inherit; font-size: 13px; cursor: pointer; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive actions only — delete room/message/user, demote admin.",
+      "html": "<button class=\"ds-btn-danger\">삭제</button>",
+      "css": ".ds-btn-danger { background: var(--danger); color: #fff; border: 1px solid var(--danger); border-radius: 8px; padding: 6px 12px; font-family: inherit; font-size: 13px; cursor: pointer; }"
+    },
+    {
+      "name": "Unread Count Badge",
+      "kind": "chip",
+      "refersTo": "badge-count",
+      "description": "Per-room and sidebar unread-message counter. Inverts to white-on-coral when placed on the already-blue active nav link.",
+      "html": "<span class=\"ds-badge-count\">3</span>",
+      "css": ".ds-badge-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }"
+    },
+    {
+      "name": "Reaction Pill",
+      "kind": "chip",
+      "refersTo": "reaction-pill",
+      "description": "Emoji reaction count under a chat message. Highlights amber/bold when the current user is one of the reactors.",
+      "html": "<button class=\"ds-reaction-pill ds-mine\">👍 3</button>",
+      "css": ".ds-reaction-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; line-height: 1.6; } .ds-reaction-pill:hover { border-color: var(--primary); } .ds-reaction-pill.ds-mine { background: var(--mention-bg); border-color: var(--primary); font-weight: 700; }"
+    },
+    {
+      "name": "Own Message Bubble",
+      "kind": "custom",
+      "refersTo": "message-bubble-mine",
+      "description": "The current user's own chat message, right-aligned with the primary fill.",
+      "html": "<div class=\"ds-msg-bubble-mine\">확인했습니다, 바로 반영할게요.</div>",
+      "css": ".ds-msg-bubble-mine { max-width: 70%; margin-left: auto; background: var(--primary); color: var(--primary-text); border-radius: 12px; padding: 8px 12px; font-size: 13px; word-break: break-word; white-space: pre-wrap; }"
+    },
+    {
+      "name": "Sidebar Nav Link",
+      "kind": "nav",
+      "refersTo": "sidebar-link",
+      "description": "App-shell navigation row. Active state fills solid primary with a text-colored left accent bar — the only left-border accent in the system.",
+      "html": "<a class=\"ds-sidebar-link ds-active\">채팅 <span class=\"ds-badge-count\">3</span></a>",
+      "css": ".ds-sidebar-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); border-left: 3px solid transparent; background: var(--bg); color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; } .ds-sidebar-link.ds-active { background: var(--primary); color: var(--primary-text); border-color: var(--primary); border-left-color: var(--text); } .ds-sidebar-link.ds-active .ds-badge-count { background: #fff; color: var(--danger); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text/select/textarea styling. No custom focus ring exists in the source — falls back to the browser default outline.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"방 이름\">",
+      "css": ".ds-input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px; }"
+    },
+    {
+      "name": "Panel / Card",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "The base container for room lists, the schedule calendar, and other grouped content. Flat — border only, no shadow.",
+      "html": "<div class=\"ds-panel\">패널 콘텐츠</div>",
+      "css": ".ds-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Shift Log",
+    "overview": "TeamChat reads like a tool people duck into mid-task, not a product they spend time in. Everything about it — the flat gray panels, the single blue accent reserved for one action per screen, the system font stack with a Korean fallback baked in — says internal utility over showcase. It is calm and unapologetically plain: no illustration, no marketing chrome, no attempt to feel like a consumer chat app. The restraint isn't cold, though — rounded corners on nearly everything (8–12px, going fully pill-shaped for anything that's a count or a tag), soft emoji used as functional icons (🌙/☀️ for theme, 🔒 for private rooms, colored dots for status), and a warm amber highlight for mentions keep it from reading as sterile. The overall character the team confirmed: restrained, but warm.\n\nThe system is fully dark-mode mirrored via a data-theme attribute the user toggles explicitly (falling back to prefers-color-scheme when unset) — every token has a light and dark value, and both are load-bearing, not an afterthought.",
+    "keyCharacteristics": [
+      "One accent color (signal-blue) used sparingly, for the single primary action on a screen — not scattered across secondary buttons.",
+      "Flat by default: every resting surface (panel, card, button, input) is bordered, not shadowed.",
+      "Elevation is reserved for floating/transient layers only (pickers, dropdowns, modal scrims).",
+      "Pill shape (999px) marks anything representing a count, status, or tag; 8–10px marks containers and controls.",
+      "Full light/dark parity — no color exists in only one theme."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Signal Blue appears on at most one control per screen — the primary action. Secondary, danger, and ghost buttons all stay neutral; adding blue to more than the single primary action breaks the system's restraint.", "section": "colors" },
+      { "name": "The Border-Not-Shadow Rule", "body": "A surface's edge is drawn with a 1px border in the neutral border color, never a shadow. Shadows are reserved for floating layers only.", "section": "colors" },
+      { "name": "The Two-Weight Rule", "body": "Text is either regular body weight or bumped to 600–700 for emphasis (names, titles, badges) — there is no intermediate 500 weight anywhere in the system.", "section": "typography" },
+      { "name": "The Grounded-Except-Floating Rule", "body": "If it sits in the document flow, it's flat and bordered. If it floats above the page (picker, dropdown, scrim), it gets a shadow. Nothing in between.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Signal Blue on exactly one control per screen (The One Accent Rule) — don't reach for it as a general \"important button\" color.",
+      "Do draw every surface edge with the shared 1px neutral border, not a shadow.",
+      "Do reserve box-shadow for floating/transient layers (pickers, dropdowns, the modal scrim) — never on a resting card, panel, or button.",
+      "Do add any new color to both the light and dark theme blocks together; this system has no color that exists in only one mode.",
+      "Do use the full pill radius (999px) for anything that represents a count, status, or tag, and 8–10px for containers/controls."
+    ],
+    "donts": [
+      "Don't add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, and the mention-autocomplete list currently define hover feedback.",
+      "Don't introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.",
+      "Don't give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional."
+    ]
+  }
+}
