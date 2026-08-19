@@ -113,25 +113,25 @@ body {
 .badge-count[hidden] { display: none; }
 
 /* layout / panels */
-/* 로그인 후 첫 화면(rooms.html)의 대시보드 그리드: 채팅방(주 업무 목록)이 왼쪽에서 두 행을
-   차지하고, 1:1 대화/접속자가 오른쪽에 쌓인다. 관리자일 때만 하단에 관리 영역이 한 행 추가된다.
+/* 로그인 후 첫 화면(rooms.html)의 대시보드 그리드: 채팅방(주 업무 목록)과 1:1 대화가
+   나란히 한 행을 차지한다("1:1 대화"는 대화 상대+접속자를 합친 사람 목록이라 더 이상
+   별도 "접속 중인 사용자" 칸이 필요 없다). 관리자일 때만 하단에 관리 영역이 한 행 추가된다.
    각 목록은 패널 안에서만 스크롤되므로(.room-list flex:1) 목록이 아무리 길어도 페이지 전체가
    늘어나지 않는다 — chat.html의 .messages 스크롤 영역과 같은 패턴이다. */
 .layout {
   display: grid; grid-template-columns: minmax(280px, 1.3fr) minmax(240px, 1fr);
-  grid-template-rows: 1fr 1fr; grid-template-areas: "rooms direct" "rooms active";
+  grid-template-rows: 1fr; grid-template-areas: "rooms direct";
   gap: 16px; padding: 24px; max-width: 1100px; margin: 0 auto; width: 100%; box-sizing: border-box;
 }
-.layout.has-admin { grid-template-rows: 1fr 1fr auto; grid-template-areas: "rooms direct" "rooms active" "admin admin"; }
+.layout.has-admin { grid-template-rows: 1fr auto; grid-template-areas: "rooms direct" "admin admin"; }
 .layout-rooms { grid-area: rooms; }
 .layout-direct { grid-area: direct; }
-.layout-active { grid-area: active; }
 .layout-admin { grid-area: admin; }
 
 @media (max-width: 1023px) {
   .layout, .layout.has-admin {
     grid-template-columns: 1fr; grid-template-rows: none;
-    grid-template-areas: "rooms" "direct" "active" "admin";
+    grid-template-areas: "rooms" "direct" "admin";
   }
 }
 
@@ -142,8 +142,7 @@ body {
   .rooms-page .layout { flex: 1; min-height: 0; overflow: hidden; }
   .rooms-page .panel { min-height: 0; }
   .rooms-page .layout-rooms > .room-list,
-  .rooms-page .layout-direct > .room-list,
-  .rooms-page .layout-active > .room-list { flex: 1; min-height: 0; overflow-y: auto; }
+  .rooms-page .layout-direct > .room-list { flex: 1; min-height: 0; overflow-y: auto; }
 }
 
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; }

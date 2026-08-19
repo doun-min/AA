@@ -14,7 +14,7 @@
   const addMemberBtn = document.getElementById("btn-add-room-member");
   const memberList = document.getElementById("new-room-member-list");
   const noUsersHint = document.getElementById("new-room-no-users-hint");
-  const activeUsersList = document.getElementById("active-users-list");
+  const directPeopleList = document.getElementById("direct-people-list");
   const groupRoomList = document.getElementById("group-room-list");
 
   const selectedMembers = new Set();
@@ -112,33 +112,16 @@
     renderMemberList();
   }
 
-  function applyActiveUsersPanel(users) {
-    if (!activeUsersList) return;
-    activeUsersList.innerHTML = "";
-    if (users.length === 0) {
-      const li = document.createElement("li");
-      li.className = "empty";
-      li.textContent = "다른 접속자가 없습니다.";
-      activeUsersList.appendChild(li);
-      return;
-    }
-    users.forEach((u) => {
-      const li = document.createElement("li");
-      li.className = "room-item";
-
-      const span = document.createElement("span");
-      span.className = "room-name";
-      span.textContent = u;
-
-      const btn = document.createElement("button");
-      btn.className = "btn-secondary btn-dm";
-      btn.dataset.target = u;
-      btn.textContent = "1:1 대화";
-      bindDmButton(btn);
-
-      li.appendChild(span);
-      li.appendChild(btn);
-      activeUsersList.appendChild(li);
+  // "1:1 대화" 목록은 등록된 전체 사용자를 그대로 나열하므로(접속 여부와 무관하게 구성이
+  // 고정), 접속자 변동 시에는 행을 다시 그리지 않고 각 행의 상태 점만 온라인/오프라인으로 갱신한다.
+  function updateDirectPeopleDots(onlineSet) {
+    if (!directPeopleList) return;
+    directPeopleList.querySelectorAll("li[data-nickname]").forEach((li) => {
+      const dot = li.querySelector(".status-dot");
+      if (!dot) return;
+      const online = onlineSet.has(li.dataset.nickname);
+      dot.classList.toggle("online", online);
+      dot.classList.toggle("offline", !online);
     });
   }
 
@@ -363,10 +346,10 @@
     socket.on("room_member_removed", refreshGroupRoomsPanel);
 
     socket.on("active_users_update", (data) => {
-      const myNickname = document.body.dataset.nickname;
       const users = data.users || [];
-      applyActiveUsersPanel(users.filter((u) => u !== myNickname));
-      refreshOnlineDots(new Set(users));
+      const onlineSet = new Set(users);
+      updateDirectPeopleDots(onlineSet);
+      refreshOnlineDots(onlineSet);
     });
 
     socket.on("user_account_deleted", (data) => {

@@ -68,14 +68,40 @@ def rooms_page():
     nickname = session["nickname"]
     is_admin = auth.is_admin(nickname)
     group_rooms = db.list_group_rooms_for(nickname)
-    direct_rooms = db.list_direct_rooms_for(nickname)
-    active_users = [u for u in auth.list_active() if u != nickname]
+
+    other_nicknames = [u for u in db.list_all_users() if u != nickname]
+    online_set = set(auth.list_active())
+
     # 방 생성 시 초대 후보는 접속 여부와 무관하게 DB에 로그인 이력이 있는 전체 사용자로 노출하고,
     # 온라인 상태는 화면에서 구분 표시만 한다.
     all_users = sorted(
-        ({"nickname": u, "online": auth.is_active(u)} for u in db.list_all_users() if u != nickname),
+        ({"nickname": u, "online": u in online_set} for u in other_nicknames),
         key=lambda u: (not u["online"], u["nickname"]),
     )
+
+    # 1:1 대화 패널: "대화 상대 목록"과 "접속 중인 사용자"가 따로 있으면 같은 사람이 두 번
+    # 보여 중복이었다 — 등록된 전체 사용자를 한 목록으로 합치되, 이미 대화방이 있는 사람은
+    # 최근 대화 시작순으로 위쪽에, 아직 대화한 적 없는 사람은 접속중 우선으로 그 아래에 둔다.
+    direct_room_by_other = {r["other"]: r for r in db.list_direct_rooms_for(nickname)}
+    with_room = sorted(
+        (
+            {"nickname": u, "online": u in online_set, "room_id": direct_room_by_other[u]["id"]}
+            for u in other_nicknames
+            if u in direct_room_by_other
+        ),
+        key=lambda u: direct_room_by_other[u["nickname"]]["created_at"],
+        reverse=True,
+    )
+    without_room = sorted(
+        (
+            {"nickname": u, "online": u in online_set, "room_id": None}
+            for u in other_nicknames
+            if u not in direct_room_by_other
+        ),
+        key=lambda u: (not u["online"], u["nickname"]),
+    )
+    direct_people = with_room + without_room
+
     # 방 종류와 무관하게 안 읽은 메시지 수 전체를 배지로 표시한다(멘션 여부 무관).
     unread_counts = db.get_unread_message_counts(nickname)
     # 계정 삭제/관리자 지정 대상 목록(관리자 전용 패널): 관리자 계정과 본인은 애초에 제외해서 넘긴다.
@@ -85,7 +111,7 @@ def rooms_page():
         all_detailed = db.list_all_users_detailed()
         manageable_users = sorted(
             (
-                {"nickname": u["nickname"], "online": auth.is_active(u["nickname"])}
+                {"nickname": u["nickname"], "online": u["nickname"] in online_set}
                 for u in all_detailed
                 if u["nickname"] != nickname and u["role"] != "admin"
             ),
@@ -95,7 +121,7 @@ def rooms_page():
             (
                 {
                     "nickname": u["nickname"],
-                    "online": auth.is_active(u["nickname"]),
+                    "online": u["nickname"] in online_set,
                     "is_self": u["nickname"] == nickname,
                 }
                 for u in all_detailed
@@ -108,8 +134,7 @@ def rooms_page():
         nickname=nickname,
         is_admin=is_admin,
         group_rooms=group_rooms,
-        direct_rooms=direct_rooms,
-        active_users=active_users,
+        direct_people=direct_people,
         all_users=all_users,
         unread_counts=unread_counts,
         manageable_users=manageable_users,

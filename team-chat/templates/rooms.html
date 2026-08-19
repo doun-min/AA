@@ -35,30 +35,22 @@
 
   <section class="panel layout-direct">
     <div class="panel-header"><h2>1:1 대화</h2></div>
-    <ul class="room-list">
-      {% for room in direct_rooms %}
-      <li class="room-item">
-        <a class="room-link" href="{{ url_for('pages.chat_page', room_id=room.id) }}">
-          <span class="room-name">{{ room.other }}</span>
-          {% set count = unread_counts.get(room.id, 0) %}
-          <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
+    <ul class="room-list" id="direct-people-list">
+      {% for person in direct_people %}
+      <li class="room-item" data-nickname="{{ person.nickname }}">
+        {% if person.room_id %}
+        <a class="room-link" href="{{ url_for('pages.chat_page', room_id=person.room_id) }}">
+          <span class="room-name"><span class="status-dot {{ 'online' if person.online else 'offline' }}"></span>{{ person.nickname }}</span>
+          {% set count = unread_counts.get(person.room_id, 0) %}
+          <span class="badge-count" data-room-id="{{ person.room_id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
         </a>
+        {% else %}
+        <span class="room-name"><span class="status-dot {{ 'online' if person.online else 'offline' }}"></span>{{ person.nickname }}</span>
+        <button class="btn-secondary btn-dm" data-target="{{ person.nickname }}">1:1 대화</button>
+        {% endif %}
       </li>
       {% endfor %}
-      {% if not direct_rooms %}<li class="empty">진행 중인 1:1 대화가 없습니다.</li>{% endif %}
-    </ul>
-  </section>
-
-  <section class="panel layout-active">
-    <div class="panel-header"><h2>접속 중인 사용자</h2></div>
-    <ul class="room-list" id="active-users-list">
-      {% for user in active_users %}
-      <li class="room-item">
-        <span class="room-name">{{ user }}</span>
-        <button class="btn-secondary btn-dm" data-target="{{ user }}">1:1 대화</button>
-      </li>
-      {% endfor %}
-      {% if not active_users %}<li class="empty">다른 접속자가 없습니다.</li>{% endif %}
+      {% if not direct_people %}<li class="empty">등록된 다른 사용자가 없습니다.</li>{% endif %}
     </ul>
   </section>
 
