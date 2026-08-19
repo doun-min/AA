@@ -40,7 +40,6 @@
   function scrollToBottom() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
-  scrollToBottom();
 
   // 서버 렌더링(SSR)된 과거 메시지는 멘션이 span으로 감싸져 있지 않으므로,
   // 소켓으로 오는 새 메시지(appendMessage)와 동일하게 하이라이트를 적용한다.
@@ -229,6 +228,16 @@
     }
     mine.forEach((key) => getMyReactionSet(msgDiv.dataset.msgId).add(key));
     renderReactions(msgDiv, counts, reactors);
+  });
+
+  // 입장 시 맨 아래로: 반응 pill/멘션 렌더링까지 다 끝난 뒤에 재야 실제 높이 기준으로 맞는다
+  // (반응이 있는 메시지가 뒤에 있으면 pill이 늘어나면서 이보다 먼저 스크롤하면 살짝 위에서 멈췄었다).
+  // 이미지 메시지는 로딩되면서 나중에 더 늘어날 수 있어 로드될 때마다 한 번 더 보정한다.
+  scrollToBottom();
+  messagesEl.querySelectorAll("img.msg-image").forEach((img) => {
+    if (img.complete) return;
+    img.addEventListener("load", scrollToBottom, { once: true });
+    img.addEventListener("error", scrollToBottom, { once: true });
   });
 
   async function toggleReaction(msgId, reaction) {
