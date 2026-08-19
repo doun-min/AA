@@ -13,6 +13,7 @@ def create_app():
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
 
     os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(config.LOG_BACKUP_FOLDER, exist_ok=True)
     db.init_db()
 
     from routes.pages import pages_bp

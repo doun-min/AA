@@ -1,3 +1,5 @@
+import os
+
 from flask import Blueprint, abort, jsonify, request, session
 
 import auth
@@ -6,6 +8,19 @@ import db
 from extensions import socketio
 
 rooms_bp = Blueprint("rooms_api", __name__, url_prefix="/api")
+
+
+def _backup_messages_to_file(room, admin_nickname, start_date, end_date, messages):
+    """삭제 대상 메시지를 지우기 전에, 방별로 계속 이어 쓰는(append) 백업 txt 파일에 기록해둔다."""
+    os.makedirs(config.LOG_BACKUP_FOLDER, exist_ok=True)
+    path = os.path.join(config.LOG_BACKUP_FOLDER, f"room_{room['id']}_log_backup.txt")
+    header = (
+        f"===== 삭제일시: {db.now_iso()} | 삭제자: {admin_nickname} | "
+        f"방: {room['name']} | 대상 기간: {start_date} ~ {end_date} | {len(messages)}건 ====="
+    )
+    lines = [header] + [db.format_message_line(m) for m in messages] + [""]
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def _require_login():
@@ -58,7 +73,7 @@ def delete_room(room_id):
         return jsonify(error="전체 채팅방은 삭제할 수 없습니다."), 400
 
     is_owner = room.get("owner_nickname") == nickname
-    if not (is_owner or auth.is_superadmin(nickname)):
+    if not (is_owner or auth.is_admin(nickname)):
         return jsonify(error="방을 삭제할 권한이 없습니다."), 403
 
     db.delete_room(room_id)
@@ -74,7 +89,7 @@ def transfer_room(room_id):
         abort(404)
 
     is_owner = room.get("owner_nickname") == nickname
-    if not (is_owner or auth.is_superadmin(nickname)):
+    if not (is_owner or auth.is_admin(nickname)):
         return jsonify(error="방장 권한을 위임할 권한이 없습니다."), 403
 
     new_owner = ((request.get_json(silent=True) or {}).get("new_owner") or "").strip()
@@ -102,7 +117,7 @@ def invite_room_member(room_id):
         return jsonify(error="공개 방은 초대가 필요 없습니다."), 400
 
     is_owner = room.get("owner_nickname") == nickname
-    if not (is_owner or auth.is_superadmin(nickname)):
+    if not (is_owner or auth.is_admin(nickname)):
         return jsonify(error="멤버를 초대할 권한이 없습니다."), 403
 
     target = ((request.get_json(silent=True) or {}).get("nickname") or "").strip()
@@ -143,7 +158,7 @@ def remove_room_member(room_id, target_nickname):
         return jsonify(error="공개 방은 멤버 제거를 지원하지 않습니다."), 400
 
     is_owner = room.get("owner_nickname") == nickname
-    if not (is_owner or auth.is_superadmin(nickname)):
+    if not (is_owner or auth.is_admin(nickname)):
         return jsonify(error="멤버를 제거할 권한이 없습니다."), 403
     if target_nickname == room.get("owner_nickname"):
         return jsonify(error="방장은 제거할 수 없습니다. 먼저 방장 위임을 해주세요."), 400
@@ -232,13 +247,88 @@ def delete_message(message_id):
     msg = db.get_message(message_id)
     if not msg or msg["type"] == "system" or msg["deleted_at"]:
         abort(404)
-    if msg["sender"] != nickname:
+    is_own = msg["sender"] == nickname
+    is_admin = auth.is_admin(nickname)
+    if not is_own and not is_admin:
         return jsonify(error="본인 메시지만 삭제할 수 있습니다."), 403
 
-    db.delete_message(message_id)
+    # 관리자가 타인의 메시지를 지울 때는 완전 삭제(하드 삭제), 본인 메시지는 기존처럼
+    # '삭제된 메시지입니다' 흔적만 남기는 소프트 삭제를 유지한다.
+    hard = is_admin and not is_own
+    if hard:
+        db.hard_delete_message(message_id)
+    else:
+        db.delete_message(message_id)
     socketio.emit(
         "message_deleted",
-        {"message_id": message_id, "room_id": msg["room_id"]},
+        {"message_id": message_id, "room_id": msg["room_id"], "hard": hard},
         room=str(msg["room_id"]),
     )
+    return jsonify(ok=True)
+
+
+@rooms_bp.route("/rooms/<int:room_id>/messages", methods=["DELETE"])
+def clear_room_log(room_id):
+    """관리자 전용: 지정한 기간의 메시지 로그를 백업 후 삭제한다(방은 유지)."""
+    nickname = _require_login()
+    if not auth.is_admin(nickname):
+        return jsonify(error="로그를 초기화할 권한이 없습니다."), 403
+    room = db.get_room(room_id)
+    if not room:
+        abort(404)
+
+    body = request.get_json(silent=True) or {}
+    start_date = (body.get("start_date") or "").strip()
+    end_date = (body.get("end_date") or "").strip()
+    if not start_date or not end_date:
+        return jsonify(error="삭제할 시작일과 종료일을 선택해주세요."), 400
+    if start_date > end_date:
+        return jsonify(error="시작일이 종료일보다 늦을 수 없습니다."), 400
+
+    messages = db.list_messages_in_range(room_id, start_date, end_date)
+    if not messages:
+        return jsonify(error="해당 기간에 삭제할 로그가 없습니다."), 400
+
+    _backup_messages_to_file(room, nickname, start_date, end_date, messages)
+    deleted_ids = [m["id"] for m in messages]
+    db.clear_room_messages_in_range(room_id, start_date, end_date)
+
+    text = f"{nickname}님이 {start_date} ~ {end_date} 기간의 로그({len(deleted_ids)}건)를 삭제했습니다."
+    sys_msg = db.add_message(room_id, nickname, "system", content=text)
+    socketio.emit(
+        "room_log_cleared",
+        {
+            "room_id": room_id,
+            "deleted_message_ids": deleted_ids,
+            "system_message": {
+                "id": sys_msg["id"], "room_id": room_id, "sender": nickname, "type": "system",
+                "content": text, "created_at": sys_msg["created_at"], "unread_count": 0,
+            },
+        },
+        room=str(room_id),
+    )
+    return jsonify(ok=True, deleted_count=len(deleted_ids))
+
+
+@rooms_bp.route("/users/<nickname>", methods=["DELETE"])
+def delete_user(nickname):
+    """관리자 전용: 사용자 계정을 시스템에서 완전히 삭제한다."""
+    requester = _require_login()
+    if not auth.is_admin(requester):
+        return jsonify(error="사용자를 삭제할 권한이 없습니다."), 403
+    if nickname == requester:
+        return jsonify(error="본인 계정은 삭제할 수 없습니다."), 400
+    if not db.user_exists(nickname):
+        return jsonify(error="존재하지 않는 사용자입니다."), 404
+    if auth.is_admin(nickname):
+        return jsonify(error="관리자 계정은 삭제할 수 없습니다."), 400
+
+    db.delete_user_account(nickname)
+    auth.release_nickname(nickname)
+    _notify_member(nickname, "account_deleted", {})
+    socketio.emit("user_account_deleted", {"nickname": nickname})
+
+    from sockets import broadcast_active_users
+
+    broadcast_active_users()
     return jsonify(ok=True)

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}이슈 공유{% endblock %}
 {% block body %}
-<div class="defect-page" data-nickname="{{ nickname }}" data-is-superadmin="{{ 'true' if is_superadmin else 'false' }}">
+<div class="defect-page" data-nickname="{{ nickname }}" data-is-admin="{{ 'true' if is_admin else 'false' }}">
   <div class="topbar">
     <div class="topbar-user"><strong>이슈 공유</strong></div>
     <div class="topbar-actions">
@@ -10,7 +10,7 @@
     </div>
   </div>
 
-  {% if is_superadmin %}
+  {% if is_admin %}
   <div class="admin-panel">
     <div class="admin-panel-group">
       <h3>검증 주제 관리</h3>

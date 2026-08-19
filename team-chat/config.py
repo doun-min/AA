@@ -9,6 +9,10 @@ DB_PATH = os.path.join(BASE_DIR, "chat.db")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
 
+# 관리자가 기간을 지정해 로그를 삭제할 때, 삭제 전 내용을 방별로 계속 이어서(append)
+# 백업해두는 txt 파일 위치. 삭제 이력 전체가 시간순으로 한 파일에 쌓인다.
+LOG_BACKUP_FOLDER = os.path.join(BASE_DIR, "log_backups")
+
 ALLOWED_EXTENSIONS = {
     "png", "jpg", "jpeg", "gif", "webp", "bmp",
     "pdf", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
@@ -17,8 +21,9 @@ ALLOWED_EXTENSIONS = {
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 
 # 로그인은 닉네임만 입력하는 방식이라 별도 계정 시스템이 없다.
-# 여기 등록된 닉네임으로 로그인하면 자동으로 슈퍼관리자 권한이 부여된다.
-SUPERADMIN_NAMES = {"admin", "관리자"}
+# 관리자 권한은 users.role 컬럼(db.py)으로 관리하며, 관리자가 한 명도 없는 최초 기동 시에만
+# 이 닉네임을 자동으로 admin으로 시딩한다(db._ensure_initial_admin).
+INITIAL_ADMIN_NICKNAME = "test11"
 
 GLOBAL_ROOM_NAME = "전체"
 SCHEDULE_ROOM_NAME = "일정공유"

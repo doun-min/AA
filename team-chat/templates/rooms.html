@@ -4,7 +4,7 @@
 <div class="topbar">
   <div class="topbar-user">
     <strong>{{ nickname }}</strong>
-    {% if is_superadmin %}<span class="badge badge-admin">슈퍼관리자</span>{% endif %}
+    {% if is_admin %}<span class="badge badge-admin">관리자</span>{% endif %}
   </div>
   <form method="post" action="{{ url_for('pages.logout') }}"><button class="btn-ghost" type="submit">나가기</button></form>
 </div>
@@ -24,7 +24,7 @@
           {% set count = mention_counts.get(room.id, 0) %}
           <span class="badge-count" data-room-id="{{ room.id }}" {% if not count %}hidden{% endif %}>{{ count }}</span>
         </a>
-        {% if room.is_deletable and (room.owner_nickname == nickname or is_superadmin) %}
+        {% if room.is_deletable and (room.owner_nickname == nickname or is_admin) %}
         <button class="btn-danger btn-delete-room" data-room-id="{{ room.id }}">삭제</button>
         {% endif %}
       </li>
@@ -60,6 +60,24 @@
       {% if not active_users %}<li class="empty">다른 접속자가 없습니다.</li>{% endif %}
     </ul>
   </section>
+
+  {% if is_admin %}
+  <section class="panel">
+    <div class="panel-header"><h2>사용자 관리</h2></div>
+    <ul class="room-list" id="manageable-users-list">
+      {% for user in manageable_users %}
+      <li class="room-item" data-nickname="{{ user.nickname }}">
+        <span class="room-name">
+          <span class="status-dot {{ 'online' if user.online else 'offline' }}"></span>
+          {{ user.nickname }}
+        </span>
+        <button class="btn-danger btn-delete-user" data-nickname="{{ user.nickname }}">계정 삭제</button>
+      </li>
+      {% endfor %}
+      {% if not manageable_users %}<li class="empty">삭제할 수 있는 사용자가 없습니다.</li>{% endif %}
+    </ul>
+  </section>
+  {% endif %}
 </div>
 
 <div id="create-room-modal" class="modal-overlay" hidden>

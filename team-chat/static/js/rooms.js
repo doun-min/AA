@@ -262,8 +262,23 @@
     });
   }
 
+  function bindDeleteUserButton(btn) {
+    btn.addEventListener("click", async () => {
+      const target = btn.dataset.nickname;
+      if (!confirm(`${target}님의 계정을 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
+      const res = await fetch(`/api/users/${encodeURIComponent(target)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        btn.closest("li")?.remove();
+      } else {
+        alert(data.error || "계정을 삭제하지 못했습니다.");
+      }
+    });
+  }
+
   bindDeleteButtons();
   document.querySelectorAll(".btn-dm").forEach(bindDmButton);
+  document.querySelectorAll(".btn-delete-user").forEach(bindDeleteUserButton);
 
   // room_member_added/removed(비공개 방에 초대되거나 방에서 빠짐) 발생 시
   // 예전에는 전체 새로고침(window.location.reload)으로 처리했는데, 화면이
@@ -312,6 +327,12 @@
       const users = data.users || [];
       applyActiveUsersPanel(users.filter((u) => u !== myNickname));
       refreshOnlineDots(new Set(users));
+    });
+
+    socket.on("user_account_deleted", (data) => {
+      document
+        .querySelector(`#manageable-users-list li[data-nickname="${CSS.escape(data.nickname)}"]`)
+        ?.remove();
     });
   }
 })();

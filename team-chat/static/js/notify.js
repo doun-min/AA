@@ -76,6 +76,13 @@ window.ChatNotify = (function () {
       updateSidebarMentionBadge(data.total || 0);
     });
 
+    socket.on("account_deleted", () => {
+      alert("관리자에 의해 계정이 삭제되었습니다.");
+      fetch("/logout", { method: "POST" }).finally(() => {
+        window.location.href = "/login";
+      });
+    });
+
     socket.on("mention", (data) => {
       // 채팅 페이지(chat.js)가 로드되어 있고 화면을 보고 있는 중이면 그쪽 인앱 토스트로
       // 충분하므로 여기서는 무시한다. 방 목록/일정/엑셀 등 chat.js가 없는 페이지에서는

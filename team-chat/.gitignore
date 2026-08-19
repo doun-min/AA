@@ -3,6 +3,8 @@ __pycache__/
 chat.db
 static/uploads/*
 !static/uploads/.gitkeep
+log_backups/*
+!log_backups/.gitkeep
 node_modules/
 package-lock.json
 .venv/

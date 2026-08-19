@@ -66,6 +66,7 @@ def logout():
 @auth.login_required
 def rooms_page():
     nickname = session["nickname"]
+    is_admin = auth.is_admin(nickname)
     group_rooms = db.list_group_rooms_for(nickname)
     direct_rooms = db.list_direct_rooms_for(nickname)
     active_users = [u for u in auth.list_active() if u != nickname]
@@ -81,15 +82,27 @@ def rooms_page():
         **db.get_unread_mention_counts(nickname),
         **db.get_unread_direct_message_counts(nickname),
     }
+    # 계정 삭제 대상 목록(관리자 전용 패널): 관리자 계정과 본인은 애초에 제외해서 넘긴다.
+    manageable_users = []
+    if is_admin:
+        manageable_users = sorted(
+            (
+                {"nickname": u["nickname"], "online": auth.is_active(u["nickname"])}
+                for u in db.list_all_users_detailed()
+                if u["nickname"] != nickname and u["role"] != "admin"
+            ),
+            key=lambda u: (not u["online"], u["nickname"]),
+        )
     return render_template(
         "rooms.html",
         nickname=nickname,
-        is_superadmin=auth.is_superadmin(nickname),
+        is_admin=is_admin,
         group_rooms=group_rooms,
         direct_rooms=direct_rooms,
         active_users=active_users,
         all_users=all_users,
         mention_counts=mention_counts,
+        manageable_users=manageable_users,
     )
 
 
@@ -112,7 +125,7 @@ def defect_page():
     return render_template(
         "defect.html",
         nickname=nickname,
-        is_superadmin=auth.is_superadmin(nickname),
+        is_admin=auth.is_admin(nickname),
         subjects=db.list_subjects(),
         issue_fields=db.list_issue_fields(),
     )
@@ -131,8 +144,8 @@ def chat_page(room_id):
     db.ensure_room_participant(room_id, nickname)
     messages = db.list_messages_with_unread(room_id)
     is_owner = room.get("owner_nickname") == nickname
-    is_superadmin = auth.is_superadmin(nickname)
-    can_manage = is_owner or is_superadmin
+    is_admin = auth.is_admin(nickname)
+    can_manage = is_owner or is_admin
     room_members = [n for n in db.get_room_member_nicknames(room_id, room["type"]) if n != nickname]
 
     # 참여 인원 모달에 표시할 목록: 나(항상 온라인) + 다른 참여자(온라인 우선 정렬), 각자 접속 상태 포함
@@ -171,7 +184,7 @@ def chat_page(room_id):
         messages=messages,
         nickname=nickname,
         is_owner=is_owner,
-        is_superadmin=is_superadmin,
+        is_admin=is_admin,
         can_manage=can_manage,
         room_deletable=bool(room["is_deletable"]),
         participants=participants,

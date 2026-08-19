@@ -5,6 +5,7 @@
      data-room-id="{{ room.id }}"
      data-nickname="{{ nickname }}"
      data-room-type="{{ room.type }}"
+     data-is-admin="{{ 'true' if is_admin else 'false' }}"
      data-last-message-id="{{ messages[-1].id if messages else 0 }}"
      data-room-members='{{ room_members|tojson }}'
      data-online-users='{{ (participants|selectattr("online")|map(attribute="nickname")|list)|tojson }}'>
@@ -20,6 +21,9 @@
       {% endif %}
       {% if room_deletable and can_manage %}
       <button id="btn-delete" class="btn-danger">방 삭제</button>
+      {% endif %}
+      {% if is_admin %}
+      <button id="btn-clear-log" class="btn-danger">로그 초기화</button>
       {% endif %}
       <a class="btn-secondary" href="{{ url_for('logs.download_log', room_id=room.id) }}">로그 다운로드</a>
     </div>
@@ -46,7 +50,7 @@
             <span class="msg-time">{{ m.created_at.replace('T',' ').split('+')[0] }}</span>
             <button type="button" class="msg-react-btn" data-msg-id="{{ m.id }}" title="반응 남기기">🙂+</button>
             <button type="button" class="msg-reactors-btn" data-msg-id="{{ m.id }}" title="반응자 보기" hidden>👥</button>
-            {% if m.sender == nickname %}
+            {% if m.sender == nickname or is_admin %}
             <button type="button" class="msg-delete-btn" data-msg-id="{{ m.id }}" title="메시지 삭제">🗑</button>
             {% endif %}
           </div>
@@ -134,6 +138,33 @@
       </div>
       {% endif %}
       <p id="participants-error" class="error"></p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if is_admin %}
+<div id="clear-log-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>로그 삭제</h2>
+      <button type="button" class="modal-close" id="clear-log-modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label>
+        시작일
+        <input type="date" id="clear-log-start">
+      </label>
+      <label>
+        종료일
+        <input type="date" id="clear-log-end">
+      </label>
+      <p id="clear-log-error" class="error"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn-ghost" id="clear-log-cancel">취소</button>
+        <button type="button" class="btn-danger" id="clear-log-confirm">삭제</button>
+      </div>
     </div>
   </div>
 </div>

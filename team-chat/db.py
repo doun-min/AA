@@ -34,7 +34,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     nickname TEXT PRIMARY KEY,
     first_login_at TEXT NOT NULL,
-    last_login_at TEXT NOT NULL
+    last_login_at TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin'))
 );
 
 CREATE TABLE IF NOT EXISTS rooms (
@@ -153,6 +154,10 @@ def _now():
     return datetime.now(KST).isoformat(timespec="seconds")
 
 
+def now_iso():
+    return _now()
+
+
 def today_kst():
     """서버 OS의 타임존 설정과 무관하게 '오늘'을 한국 기준으로 반환한다."""
     return datetime.now(KST).date()
@@ -183,6 +188,20 @@ def _backfill_users_from_history(cur):
         "INSERT OR IGNORE INTO users (nickname, first_login_at, last_login_at) "
         "SELECT nickname, ?, ? FROM direct_participants",
         (now, now),
+    )
+
+
+def _ensure_initial_admin(cur):
+    """최초 기동 시 관리자가 한 명도 없으면 config.INITIAL_ADMIN_NICKNAME을 admin으로 시딩한다.
+    이미 admin이 한 명이라도 있으면(다른 사람으로 바뀌었더라도) 건드리지 않는다."""
+    cur.execute("SELECT 1 FROM users WHERE role='admin' LIMIT 1")
+    if cur.fetchone():
+        return
+    now = _now()
+    cur.execute(
+        "INSERT INTO users (nickname, first_login_at, last_login_at, role) VALUES (?,?,?,'admin') "
+        "ON CONFLICT(nickname) DO UPDATE SET role='admin'",
+        (config.INITIAL_ADMIN_NICKNAME, now, now),
     )
 
 
@@ -220,6 +239,10 @@ def init_db():
         columns = {row["name"] for row in cur.fetchall()}
         if "deleted_at" not in columns:
             cur.execute("ALTER TABLE messages ADD COLUMN deleted_at TEXT")
+        cur.execute("PRAGMA table_info(users)")
+        columns = {row["name"] for row in cur.fetchall()}
+        if "role" not in columns:
+            cur.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
         cur.execute("SELECT id FROM rooms WHERE type='global' LIMIT 1")
         if cur.fetchone() is None:
             cur.execute(
@@ -237,6 +260,7 @@ def init_db():
         # 기존에 공개방을 한 번도 방문하지 않아 room_participants에서 빠져 있던
         # 사용자를 기동 시점에 한 번 맞춰준다(과거 데이터 백필).
         _sync_public_room_participants(cur)
+        _ensure_initial_admin(cur)
 
 
 def upsert_user_login(nickname):
@@ -263,6 +287,28 @@ def user_exists(nickname):
     with db_cursor() as cur:
         cur.execute("SELECT 1 FROM users WHERE nickname=?", (nickname,))
         return cur.fetchone() is not None
+
+
+def get_user_role(nickname):
+    with db_cursor() as cur:
+        cur.execute("SELECT role FROM users WHERE nickname=?", (nickname,))
+        row = cur.fetchone()
+        return row["role"] if row else "member"
+
+
+def list_all_users_detailed():
+    with db_cursor() as cur:
+        cur.execute("SELECT nickname, role FROM users ORDER BY nickname COLLATE NOCASE ASC")
+        return [dict(r) for r in cur.fetchall()]
+
+
+def delete_user_account(nickname):
+    """사용자 계정 자체를 시스템에서 제거한다. 과거에 보낸 메시지/소유한 방 기록은
+    이력으로 그대로 남기고, 참여자 목록(room/direct participants)에서만 함께 뺀다."""
+    with db_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM users WHERE nickname=?", (nickname,))
+        cur.execute("DELETE FROM room_participants WHERE nickname=?", (nickname,))
+        cur.execute("DELETE FROM direct_participants WHERE nickname=?", (nickname,))
 
 
 def get_room(room_id):
@@ -444,6 +490,41 @@ def get_original_filename(room_id, file_path):
         return row["original_filename"] if row else None
 
 
+def format_message_line(m):
+    """로그 다운로드/백업에서 공용으로 쓰는 한 줄짜리 텍스트 표현."""
+    ts = m["created_at"].replace("T", " ").split("+")[0]
+    if m["type"] == "text":
+        body = m["content"]
+    elif m["type"] == "system":
+        body = f"* {m['content']}"
+    else:
+        body = f"[파일] {m['original_filename']}"
+    return f"[{ts}] {m['sender']}: {body}"
+
+
+def list_messages_in_range(room_id, start_date, end_date):
+    """created_at의 날짜 부분(YYYY-MM-DD)이 [start_date, end_date] 구간에 속하는 메시지.
+    저장 시점에 이미 KST로 기록해두므로 문자열 앞 10자리 비교만으로 화면에 보이는
+    날짜 기준과 정확히 일치한다."""
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM messages WHERE room_id=? AND substr(created_at,1,10) BETWEEN ? AND ? "
+            "ORDER BY id ASC",
+            (room_id, start_date, end_date),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def clear_room_messages_in_range(room_id, start_date, end_date):
+    """방은 유지한 채 지정 기간의 메시지만 삭제한다(로그 초기화)."""
+    with db_cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM messages WHERE room_id=? AND substr(created_at,1,10) BETWEEN ? AND ?",
+            (room_id, start_date, end_date),
+        )
+        return cur.rowcount
+
+
 def list_messages(room_id, limit=200):
     with db_cursor() as cur:
         if limit:
@@ -548,6 +629,13 @@ def delete_message(message_id):
     """내용은 지우지 않고 deleted_at만 남겨, 화면에서는 '삭제된 메시지'로만 표시한다(소프트 삭제)."""
     with db_cursor(commit=True) as cur:
         cur.execute("UPDATE messages SET deleted_at=? WHERE id=?", (_now(), message_id))
+
+
+def hard_delete_message(message_id):
+    """관리자가 타인의 메시지를 완전히 제거할 때 쓰는 하드 삭제(행 자체 삭제).
+    반응/읽음/멘션은 FK CASCADE로 함께 정리된다."""
+    with db_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM messages WHERE id=?", (message_id,))
 
 
 def toggle_message_reaction(message_id, nickname, reaction):

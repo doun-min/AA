@@ -5,6 +5,7 @@
   const page = document.querySelector(".chat-page");
   const roomId = page.dataset.roomId;
   const nickname = page.dataset.nickname;
+  const isAdmin = page.dataset.isAdmin === "true";
 
   const messagesEl = document.getElementById("messages");
   const form = document.getElementById("message-form");
@@ -127,7 +128,7 @@
       }
       const unreadCount = msg.unread_count || 0;
       const unreadAttr = unreadCount ? "" : " hidden";
-      const deleteBtnHtml = mine
+      const deleteBtnHtml = mine || isAdmin
         ? `<button type="button" class="msg-delete-btn" data-msg-id="${msg.id}" title="메시지 삭제">🗑</button>`
         : "";
       div.innerHTML =
@@ -284,7 +285,82 @@
     if (Number(data.room_id) !== Number(roomId)) return;
     const msgDiv = messagesEl.querySelector(`.message[data-msg-id="${data.message_id}"]`);
     if (!msgDiv) return;
-    applyDeletedMessage(msgDiv);
+    if (data.hard) {
+      msgDiv.remove();
+    } else {
+      applyDeletedMessage(msgDiv);
+    }
+  });
+
+  const clearLogBtn = document.getElementById("btn-clear-log");
+  const clearLogModal = document.getElementById("clear-log-modal");
+  const clearLogModalClose = document.getElementById("clear-log-modal-close");
+  const clearLogCancelBtn = document.getElementById("clear-log-cancel");
+  const clearLogConfirmBtn = document.getElementById("clear-log-confirm");
+  const clearLogStart = document.getElementById("clear-log-start");
+  const clearLogEnd = document.getElementById("clear-log-end");
+  const clearLogError = document.getElementById("clear-log-error");
+
+  function openClearLogModal() {
+    if (!clearLogModal) return;
+    clearLogStart.value = "";
+    clearLogEnd.value = "";
+    clearLogError.textContent = "";
+    clearLogModal.hidden = false;
+  }
+
+  function closeClearLogModal() {
+    if (clearLogModal) clearLogModal.hidden = true;
+  }
+
+  if (clearLogBtn) clearLogBtn.addEventListener("click", openClearLogModal);
+  if (clearLogModalClose) clearLogModalClose.addEventListener("click", closeClearLogModal);
+  if (clearLogCancelBtn) clearLogCancelBtn.addEventListener("click", closeClearLogModal);
+  if (clearLogModal) {
+    clearLogModal.addEventListener("click", (e) => {
+      if (e.target === clearLogModal) closeClearLogModal();
+    });
+  }
+
+  if (clearLogConfirmBtn) {
+    clearLogConfirmBtn.addEventListener("click", async () => {
+      const start = clearLogStart.value;
+      const end = clearLogEnd.value;
+      clearLogError.textContent = "";
+      if (!start || !end) {
+        clearLogError.textContent = "시작일과 종료일을 모두 선택해주세요.";
+        return;
+      }
+      if (start > end) {
+        clearLogError.textContent = "시작일이 종료일보다 늦을 수 없습니다.";
+        return;
+      }
+      if (!confirm(`${start}부터 ${end}까지의 로그를 삭제합니다.\n계속하시겠습니까?`)) return;
+
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/messages`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ start_date: start, end_date: end }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          clearLogError.textContent = data.error || "로그를 삭제하지 못했습니다.";
+          return;
+        }
+        closeClearLogModal();
+      } catch (err) {
+        clearLogError.textContent = "로그를 삭제하는 중 오류가 발생했습니다.";
+      }
+    });
+  }
+
+  socket.on("room_log_cleared", (data) => {
+    if (Number(data.room_id) !== Number(roomId)) return;
+    (data.deleted_message_ids || []).forEach((id) => {
+      messagesEl.querySelector(`.message[data-msg-id="${id}"]`)?.remove();
+    });
+    if (data.system_message) appendMessage(data.system_message);
   });
 
   const reactionPicker = document.getElementById("reaction-picker");

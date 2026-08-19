@@ -16,7 +16,7 @@ def _require_login():
 
 def _require_admin():
     nickname = _require_login()
-    if not auth.is_superadmin(nickname):
+    if not auth.is_admin(nickname):
         abort(403)
     return nickname
 

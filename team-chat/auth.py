@@ -3,7 +3,7 @@ from functools import wraps
 
 from flask import redirect, session, url_for
 
-import config
+import db
 
 _lock = threading.Lock()
 _active_nicknames = set()
@@ -44,8 +44,8 @@ def list_active():
         return sorted(_active_nicknames)
 
 
-def is_superadmin(nickname):
-    return nickname in config.SUPERADMIN_NAMES
+def is_admin(nickname):
+    return db.get_user_role(nickname) == "admin"
 
 
 def login_required(view):
