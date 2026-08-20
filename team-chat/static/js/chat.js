@@ -16,6 +16,14 @@
   const transferBtn = document.getElementById("btn-transfer");
   const mentionSuggest = document.getElementById("mention-suggest");
 
+  // 실시간으로 append되는 메시지도 SSR(chat.html)과 똑같은 아이콘을 쓰도록 여기 한 곳에서만
+  // 관리한다 — 하드코딩된 이모지 대신 currentColor를 쓰는 SVG라 버튼 색(hover 포함)을 그대로 물려받는다.
+  const ICON_SMILE = '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
+  const ICON_USERS = '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+  const ICON_TRASH = '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+  const ICON_PAPERCLIP = '<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+  const ICON_IMAGE_BROKEN = '<svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+
   const MENTION_ALL = "전체";
   let roomMembers = [];
   try {
@@ -40,6 +48,29 @@
   function scrollToBottom() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
+
+  // 이미지 메시지가 깨졌을 때(네트워크 오류, 삭제된 파일, 손상된 파일) 브라우저 기본 깨짐
+  // 아이콘 대신 테마에 맞는 안내로 바꾼다. scopeEl 안의 .msg-image만 훑으므로 SSR로 이미
+  // 그려진 메시지 전체와, 실시간으로 새로 붙는 메시지 한 건 양쪽에 다 쓸 수 있다.
+  function bindImageFallback(scopeEl) {
+    scopeEl.querySelectorAll("img.msg-image").forEach((img) => {
+      function showFallback() {
+        const fallback = document.createElement("div");
+        fallback.className = "msg-image-fallback";
+        fallback.innerHTML = `${ICON_IMAGE_BROKEN}<span>이미지를 불러올 수 없습니다</span>`;
+        img.replaceWith(fallback);
+      }
+      if (img.complete) {
+        if (img.naturalWidth === 0) showFallback();
+        return;
+      }
+      img.addEventListener("load", () => {
+        if (img.naturalWidth === 0) showFallback();
+      }, { once: true });
+      img.addEventListener("error", showFallback, { once: true });
+    });
+  }
+  bindImageFallback(messagesEl);
 
   // 서버 렌더링(SSR)된 과거 메시지는 멘션이 span으로 감싸져 있지 않으므로,
   // 소켓으로 오는 새 메시지(appendMessage)와 동일하게 하이라이트를 적용한다.
@@ -123,22 +154,23 @@
       } else if (msg.type === "image") {
         body = `<div class="msg-body"><img class="msg-image" src="/files/${roomId}/${msg.file_path}" data-filename="${escapeHtml(msg.original_filename)}" alt="${escapeHtml(msg.original_filename)}"></div>`;
       } else {
-        body = `<div class="msg-body"><a href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}">📎 ${escapeHtml(msg.original_filename)}</a></div>`;
+        body = `<div class="msg-body"><a class="msg-file-link" href="/files/${roomId}/${msg.file_path}" download="${escapeHtml(msg.original_filename)}">${ICON_PAPERCLIP}${escapeHtml(msg.original_filename)}</a></div>`;
       }
       const unreadCount = msg.unread_count || 0;
       const unreadAttr = unreadCount ? "" : " hidden";
       const deleteBtnHtml = mine || isAdmin
-        ? `<button type="button" class="msg-delete-btn" data-msg-id="${msg.id}" title="메시지 삭제">🗑</button>`
+        ? `<button type="button" class="msg-delete-btn" data-msg-id="${msg.id}" title="메시지 삭제" aria-label="메시지 삭제">${ICON_TRASH}</button>`
         : "";
       div.innerHTML =
         `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span>` +
         `<span class="msg-unread" data-msg-id="${msg.id}"${unreadAttr}>${unreadCount}</span>` +
         `<span class="msg-time">${time}</span>` +
-        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기">🙂+</button>` +
-        `<button type="button" class="msg-reactors-btn" data-msg-id="${msg.id}" title="반응자 보기" hidden>👥</button>${deleteBtnHtml}</div>` +
+        `<button type="button" class="msg-react-btn" data-msg-id="${msg.id}" title="반응 남기기" aria-label="반응 남기기">${ICON_SMILE}</button>` +
+        `<button type="button" class="msg-reactors-btn" data-msg-id="${msg.id}" title="반응자 보기" aria-label="반응자 보기" hidden>${ICON_USERS}</button>${deleteBtnHtml}</div>` +
         body +
         `<div class="msg-reactions"></div>` +
         `<div class="msg-reactors-detail" hidden></div>`;
+      bindImageFallback(div);
     }
     messagesEl.appendChild(div);
     scrollToBottom();
@@ -249,11 +281,11 @@
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "반응을 남기지 못했습니다.");
+        showToast(data.error || "반응을 남기지 못했습니다.");
       }
       // 실제 카운트/내 반응 상태 갱신은 reaction_update 소켓 이벤트로 처리한다.
     } catch (err) {
-      alert("반응을 남기는 중 오류가 발생했습니다.");
+      showToast("반응을 남기는 중 오류가 발생했습니다.");
     }
   }
 
@@ -276,12 +308,12 @@
       const res = await fetch(`/api/messages/${msgId}`, { method: "DELETE" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "메시지를 삭제하지 못했습니다.");
+        showToast(data.error || "메시지를 삭제하지 못했습니다.");
         return;
       }
       // 화면 갱신은 message_deleted 소켓 이벤트로 처리한다.
     } catch (err) {
-      alert("메시지를 삭제하는 중 오류가 발생했습니다.");
+      showToast("메시지를 삭제하는 중 오류가 발생했습니다.");
     }
   }
 
@@ -479,8 +511,8 @@
 
   socket.on("room_deleted", (data) => {
     if (Number(data.room_id) === Number(roomId)) {
-      alert("이 방이 삭제되었습니다.");
-      window.location.href = "/rooms";
+      showToast("이 방이 삭제되었습니다. 목록으로 이동합니다.");
+      setTimeout(() => { window.location.href = "/rooms"; }, 1500);
     }
   });
 
@@ -503,8 +535,8 @@
   socket.on("room_member_removed", (data) => {
     if (Number(data.room_id) !== Number(roomId)) return;
     if (data.nickname === nickname) {
-      alert("이 방에서 제외되었습니다.");
-      window.location.href = "/rooms";
+      showToast("이 방에서 제외되었습니다. 목록으로 이동합니다.");
+      setTimeout(() => { window.location.href = "/rooms"; }, 1500);
       return;
     }
     removeMemberFromUI(data.nickname);
@@ -633,10 +665,10 @@
       const res = await fetch(`/api/rooms/${roomId}/upload`, { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "업로드에 실패했습니다.");
+        showToast(data.error || "업로드에 실패했습니다.");
       }
     } catch (err) {
-      alert("업로드 중 오류가 발생했습니다.");
+      showToast("업로드 중 오류가 발생했습니다.");
     }
   }
 
@@ -691,26 +723,61 @@
       if (res.ok) {
         window.location.href = "/rooms";
       } else {
-        alert(data.error || "삭제에 실패했습니다.");
+        showToast(data.error || "삭제에 실패했습니다.");
       }
     });
   }
 
-  if (transferBtn) {
-    transferBtn.addEventListener("click", async () => {
-      const target = prompt("방장을 위임할 사용자의 닉네임을 입력하세요.");
+  // 방장 위임: 예전엔 prompt()로 닉네임을 직접 입력받아서(오타/존재하지 않는 사용자 검증도
+  // 안 됨) 데스크톱 빌드에서 입력 먹통을 일으키던 그 API를 그대로 썼다. 참여 인원 초대와
+  // 같은 방식으로, 실제 방 멤버(roomMembers) 중에서만 고르는 select로 바꿨다.
+  const transferModal = document.getElementById("transfer-modal");
+  const transferSelect = document.getElementById("transfer-select");
+  const transferError = document.getElementById("transfer-error");
+  const transferEmptyHint = document.getElementById("transfer-empty-hint");
+  const transferConfirmBtn = document.getElementById("transfer-confirm");
+
+  function openTransferModal() {
+    if (!transferModal) return;
+    if (transferError) transferError.textContent = "";
+    const hasMembers = roomMembers.length > 0;
+    if (transferSelect) {
+      transferSelect.innerHTML = roomMembers.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join("");
+      transferSelect.hidden = !hasMembers;
+    }
+    if (transferEmptyHint) transferEmptyHint.hidden = hasMembers;
+    if (transferConfirmBtn) transferConfirmBtn.hidden = !hasMembers;
+    transferModal.hidden = false;
+  }
+  function closeTransferModal() {
+    if (transferModal) transferModal.hidden = true;
+  }
+  if (transferBtn) transferBtn.addEventListener("click", openTransferModal);
+  if (transferModal) {
+    transferModal.addEventListener("click", (e) => {
+      if (e.target === transferModal) closeTransferModal();
+    });
+    const closeBtn = transferModal.querySelector(".modal-close");
+    if (closeBtn) closeBtn.addEventListener("click", closeTransferModal);
+  }
+  const transferCancelBtn = document.getElementById("transfer-cancel");
+  if (transferCancelBtn) transferCancelBtn.addEventListener("click", closeTransferModal);
+  if (transferConfirmBtn) {
+    transferConfirmBtn.addEventListener("click", async () => {
+      const target = transferSelect.value;
       if (!target) return;
+      if (!(await window.confirmDialog(`${target}님에게 방장을 위임할까요?`))) return;
       const res = await fetch(`/api/rooms/${roomId}/transfer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ new_owner: target }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        alert(`${data.new_owner}님에게 방장을 위임했습니다.`);
+        closeTransferModal();
         window.location.reload();
-      } else {
-        alert(data.error || "위임에 실패했습니다.");
+      } else if (transferError) {
+        transferError.textContent = data.error || "위임에 실패했습니다.";
       }
     });
   }

@@ -4,13 +4,14 @@ description: Internal LAN team hub for chat, QA defect tracking, schedule, and E
 colors:
   signal-blue: "#4f6df5"
   signal-blue-hover: "#3b53d9"
-  alert-coral: "#e05252"
+  alert-coral: "#cb3e41"
+  alert-coral-fill: "#ce4144"
   mention-amber: "#fff3cd"
   mention-indigo: "#3554d1"
   leave-orange: "#e0762e"
   work-teal: "#2e86ab"
   online-green: "#2ecc71"
-  unread-orange: "#f5a623"
+  unread-orange: "#a85e00"
   surface: "#ffffff"
   neutral-bg: "#f5f6f8"
   border: "#e2e4e8"
@@ -125,7 +126,7 @@ components:
 
 **Creative North Star: "The Shift Log"**
 
-TeamChat reads like a tool people duck into mid-task, not a product they spend time in. Everything about it — the flat gray panels, the single blue accent reserved for one action per screen, the system font stack with a Korean fallback baked in — says internal utility over showcase. It is calm and unapologetically plain: no illustration, no marketing chrome, no attempt to feel like a consumer chat app. The restraint isn't cold, though — rounded corners on nearly everything (8–12px, going fully pill-shaped for anything that's a count or a tag), soft emoji used as functional icons (🌙/☀️ for theme, 🔒 for private rooms, colored dots for status), and a warm amber highlight for mentions keep it from reading as sterile. The overall character the team confirmed: **restrained, but warm.**
+TeamChat reads like a tool people duck into mid-task, not a product they spend time in. Everything about it — the flat gray panels, the single blue accent reserved for one action per screen, the system font stack with a Korean fallback baked in — says internal utility over showcase. It is calm and unapologetically plain: no illustration, no marketing chrome, no attempt to feel like a consumer chat app. The restraint isn't cold, though — rounded corners on nearly everything (8–12px, going fully pill-shaped for anything that's a count or a tag), a small set of semantic emoji kept where the glyph itself carries real-world meaning (🌙/☀️ for theme, 🔒/🔓 for room visibility, 🟢/⚪ for online status), minimal stroke-style SVG icons for message-level and file actions (see Components > Icons), and a warm amber highlight for mentions keep it from reading as sterile. The overall character the team confirmed: **restrained, but warm.**
 
 The system is fully dark-mode mirrored via a `data-theme` attribute the user toggles explicitly (falling back to `prefers-color-scheme` when unset) — every token below has a light and dark value, and both are load-bearing, not an afterthought.
 
@@ -157,13 +158,17 @@ Mostly neutral grayscale with one blue action accent and a small set of role-spe
 **The Border-Not-Shadow Rule.** A surface's edge is drawn with a 1px `border` in the neutral border color, never a shadow. Shadows are reserved for floating layers only (see Elevation & Depth).
 
 ### Signal Colors
-- **Alert Coral** (`#e05252` light / `#ff6b6b` dark): danger actions (delete buttons), the admin role badge, unread-count badges, and the `@전체` (mention-all) highlight.
+- **Alert Coral** (`#cb3e41` light / `#ff6b6b` dark): danger/error as *text* on a neutral background — `.error` messages, and anywhere the color reads as foreground rather than a fill. Darkened from the original `#e05252` in light mode after a contrast audit found it failed WCAG AA as text (3.5:1 on the page background); the dark-mode value was already fine as text (6.5:1+) and is unchanged.
+- **Alert Coral Fill** (`#ce4144` light / `#d04045` dark): danger/error as a *filled background carrying white text* — danger buttons, the admin role badge, unread-count badges, the `@전체` (mention-all) highlight. A sibling of Alert Coral rather than the same token: white-on-fill and fill-on-neutral-bg need different lightness in dark mode specifically (a value bright enough to read as text on a dark page is too light to hold 4.5:1 under white text), so one token can't serve both roles across both themes.
 - **Mention Amber** (`#fff3cd` light / `#4a3c00` dark): soft highlight background — the active/hover row in the @-mention autocomplete list, the schedule banner in chat, and the background of a reaction pill the current user has added.
-- **Mention Indigo** (`#3554d1` light / `#ffd166` dark, paired with `#ffffff`/`#1a1200` text): the inline highlight for an `@nickname` mention inside a message body (distinct from `@전체`, which uses Alert Coral instead).
+- **Mention Indigo** (`#3554d1` light / `#ffd166` dark, paired with `#ffffff`/`#1a1200` text): the inline highlight for an `@nickname` mention inside a message body (distinct from `@전체`, which uses Alert Coral Fill instead).
 - **Leave Orange** (`#e0762e` light / `#ff9a56` dark): schedule calendar dot/bar for 연차 (annual leave) and 반차 (half-day leave) entries.
 - **Work Teal** (`#2e86ab` light / `#5ab4d6` dark): schedule calendar dot/bar for 업무일정 (work-schedule) entries.
 - **Online Green** (`#2ecc71`, same value in both themes): the single "online" state — the filled dot next to a nickname anywhere a person's connection status is shown (active-users rows, the 1:1 people list, admin/user-management rows). The offline counterpart is just `{colors.text-muted}`, not a distinct color.
-- **Unread Orange** (`#f5a623`, same value in both themes): the small "안읽음" (unread) marker text on a message a recipient hasn't seen yet — deliberately different from Alert Coral so a per-message unread marker doesn't compete visually with the room-level unread count badge.
+- **Unread Orange** (`#a85e00` light / `#f5a623` dark): the small "안읽음" (unread) marker text on a message a recipient hasn't seen yet — deliberately different from Alert Coral so a per-message unread marker doesn't compete visually with the room-level unread count badge. Light mode darkened from the original `#f5a623` after the same contrast audit (was 2.0:1 on the page background); dark mode's bright value already had strong contrast (8:1+) against the dark surface and is unchanged.
+
+### Named Rules
+**The Text-vs-Fill Rule.** Any signal color used both as text-on-neutral-bg and as a fill-carrying-white-text needs two tokens, not one — the two roles pull lightness in opposite directions in dark mode. Alert Coral / Alert Coral Fill is the concrete instance; apply the same split before reusing a signal color in a new fill context.
 
 ## Typography
 
@@ -225,13 +230,18 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Shape:** 8px radius; all variants (secondary/danger/ghost) keep a 1px border, including ghost — only its background drops to transparent. `.btn-primary` has no border (its fill is the edge).
 - **Primary** (`.btn-primary`: `{colors.signal-blue}` bg, white text, no border, padding `6px 12px` — same footprint as secondary/danger/ghost, weight 600, `align-self: flex-start` so it never stretches to its container's full width): the reusable primary button, currently just "+ 방 만들기" (create room). Reserve it for the one thing a screen most wants the visitor to do; everything else on that screen stays secondary/ghost/danger (The One Accent Rule). The send-message and login buttons are older, larger one-off instances of the same color (`10px 16px` / `10px` padding) predating this class — don't copy their sizing for a new primary button, use `.btn-primary`.
 - **Secondary** (`{colors.neutral-bg}` bg, `{colors.text}` text, bordered): the default button for most actions (save, add, "+ 일정 추가").
-- **Danger** (`{colors.alert-coral}` bg + border, white text): destructive actions only (delete room/message/user, demote admin).
+- **Danger** (`{colors.alert-coral-fill}` bg + border, white text): destructive actions only (delete room/message/user, demote admin).
 - **Ghost** (transparent bg, bordered, `{colors.text}` text): tertiary/cancel actions, and links styled as buttons (e.g. "다크모드").
 - **Hover / Focus:** `.btn-primary` is the one button variant with a hover state — it deepens to `{colors.signal-blue-hover}` over 0.2s ease, color only, no shadow or movement. Every other button/panel/list row still has none; don't assume one exists elsewhere when extending a button.
 
+### Icons
+- **Message-level and file actions** (react, view reactors, delete a message, attach a file, the drag-and-drop overlay) use inline Feather-style SVGs: 24×24 viewBox rendered at 14–18px, `fill="none"`, `stroke="currentColor"`, `stroke-width="2"`, round linecaps/linejoins. `stroke="currentColor"` is the load-bearing choice — an icon automatically inherits its button's existing `color` (including hover-opacity and rendering white inside the blue "my message" bubble) with no new palette entry.
+- **Why SVG here instead of emoji:** these were previously raw emoji glyphs (🙂+/🗑/👥/📎) functioning as the only label on otherwise-unlabeled buttons — inconsistent rendering across platforms/fonts, no real affordance, and several had no `title`/`aria-label` at all. Every icon button now carries both, in Korean (e.g. `aria-label="반응 남기기"`); don't ship a new icon-only button without both.
+- **What stays emoji on purpose:** two other emoji uses are unaffected and shouldn't be "fixed" to match — the theme toggle (🌙/☀️) and room-visibility indicator (🔒/🔓) use emoji because the glyph itself is the universally-recognized real-world symbol, not a UI-chrome substitute; the reaction picker (⭕❌👍👎✅) stays emoji because there the emoji *is* the message content the user is sending, not an icon labeling an action.
+
 ### Badges & Pills
-- **Status badge:** pill, muted `{colors.border}` bg + `{colors.text-muted}` text; the admin-role variant swaps to solid Alert Coral + white.
-- **Count badge:** pill, Alert Coral bg, white bold text, 18px minimum diameter — used for unread counts everywhere except inside the active (already-blue) sidebar nav link, where it inverts to a white pill with coral text so it still reads against the fill.
+- **Status badge:** pill, muted `{colors.border}` bg + `{colors.text-muted}` text; the admin-role variant swaps to solid Alert Coral Fill + white.
+- **Count badge:** pill, Alert Coral Fill bg, white bold text, 18px minimum diameter — used for unread counts everywhere except inside the active (already-blue) sidebar nav link, where it inverts to a white pill with Alert Coral Fill text so it still reads against the fill.
 - **Reaction pill:** pill, `{colors.surface}` bg + border by default; becomes Mention Amber bg + Signal Blue border + bold text when the current user is one of the reactors.
 - **Issue subject tag:** pill, muted bg; an "archived" subject drops to a transparent, dashed-border pill instead of being hidden.
 
@@ -254,7 +264,8 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Own messages:** right-aligned, `{colors.signal-blue}` background, white text, 12px radius, no border.
 - **Others' messages:** left-aligned, `{colors.neutral-bg}` background, 1px border, 12px radius.
 - **Deleted messages:** italic, `{colors.text-muted}` text, background stripped to transparent regardless of sender.
-- **Inline mentions:** `@nickname` gets Mention Indigo bg + white text, bold, 4px radius; the reserved `@전체` mention-all instead uses Alert Coral, so a mention-everyone message is visually distinct from a targeted one.
+- **Inline mentions:** `@nickname` gets Mention Indigo bg + white text, bold, 4px radius; the reserved `@전체` mention-all instead uses Alert Coral Fill, so a mention-everyone message is visually distinct from a targeted one.
+- **Broken image fallback (`.msg-image-fallback`):** if an image message's `<img>` fails to load (404, corrupt file, network failure — detected via the `error` event and a `naturalWidth === 0` check), it's swapped for a fixed 180×120px dashed-border box holding the same broken-image SVG glyph plus "이미지를 불러올 수 없습니다" text, rather than leaving the browser's own broken-image icon and alt text exposed. Applies to both server-rendered history and freshly-sent messages via `bindImageFallback()`, called once on initial load and again per message inside `appendMessage()`.
 
 ### Scrollbars (signature interaction)
 - Every scrollable area in the app (message list, room/people lists, modals, the sidebar, dropdowns) uses one themed, overlay-style scrollbar instead of the browser default — this is deliberate per the craft floor's rule that browser-default surfaces still carry the design.
@@ -269,6 +280,13 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Look:** identical to every other modal — `{colors.surface}` card, 1px border, no shadow, centered over the standard `rgba(0,0,0,0.45)` scrim. Title "확인", the message as body text, `.btn-ghost` "취소" + `.btn-danger` "확인" in `.modal-actions`.
 - **Behavior:** resolves a Promise (`true`/`false`) so call sites read exactly like the native API did — `if (!(await confirmDialog(msg))) return;`. Backdrop click, Escape, and Enter all work (cancel / cancel / confirm respectively).
 - Markup lives once in `base.html` (available on every page); don't add a second instance or a page-local variant.
+- **Escape closes every modal, not just this one:** `modal-escape.js` (also loaded once in `base.html`) listens for Escape app-wide and, for whichever `.modal-overlay` is currently visible, clicks that modal's own `.modal-close` button — so each modal's existing close/cleanup logic runs unchanged rather than duplicating it. `#confirm-modal` is excluded since it already resolves its Promise on Escape itself (see above). Any new modal gets this for free as long as it follows the standard `.modal-overlay` + `.modal-close` markup shape.
+- **Selection modals** (참여 인원's invite-select, 방장 위임's transfer-select) reuse this same modal chrome with a single native `<select>` of eligible users as the body, `.btn-ghost`/`.btn-secondary` cancel/confirm actions, and an inline `.error` line for server-side failures — the standard shape for "pick one person and act on them," not a one-off.
+
+### Toast
+- A small non-blocking notice (`#toast-container` in `chat.html`, `showToast(text)`) that appears, holds briefly, and dismisses itself with no user interaction required.
+- **Now the default for every transient status message that isn't a decision** — originally introduced for mention notifications, it now also covers reaction/delete/upload failures and room-membership/deletion notices, replacing what used to be `alert()`. Anywhere the app needs to *tell* the user something without blocking them or asking for a choice, it's a toast; anywhere it needs a yes/no decision, it's the Confirm Modal, never a native dialog.
+- **Redirect timing:** a couple of call sites (being removed from a room, a room being deleted out from under you) navigate the user away right after showing the toast. Since a toast doesn't block like `alert()` did, those redirects are deliberately delayed (`setTimeout`, ~1.5s) so the toast is actually readable before the page navigates.
 
 ### Calendar Cell (signature component)
 - Day cells show small colored dots (Leave Orange / Work Teal) for entries on that day, plus a bar that visually spans from a range's start cell to its end cell (achieved with negative margins so adjacent-day bars touch with no gap).
@@ -290,4 +308,4 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Don't** introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.
 - **Don't** give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional (see PRODUCT.md's Positioning and Evidence on Hand).
 - **Don't** size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard (`.layout`'s `auto` schedule row sizes to content — a full-size calendar squeezed 채팅방/1:1 대화 down to almost nothing). Widgets sharing that grid should stay compact enough that every region stays usable.
-- **Don't** use the native `confirm()`/`prompt()`/`alert()` for a new destructive action — use `window.confirmDialog(message)` (see Confirm Modal). The native dialogs are the known cause of dead renderer input in the desktop build.
+- **Don't** use a native `confirm()`, `prompt()`, or `alert()` anywhere — use `window.confirmDialog(message)` for a yes/no decision (see Confirm Modal), `showToast(text)` for a status notice (see Toast), and a themed modal + `<select>` for picking from a list (see Selection modals). The native dialogs are the known cause of dead renderer input in the desktop build, and none of the three needs remains that only a native dialog could serve.

@@ -1,44 +1,314 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-19T00:00:00Z",
+  "generatedAt": "2026-08-20T04:13:17Z",
   "title": "Design System: TeamChat",
   "extensions": {
     "colorMeta": {
-      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "oklch(58.9% 0.206 269.6)", "dark": "#6b85ff", "tonalRamp": ["#060041", "#0f0e6d", "#22309c", "#3950ce", "#5675f5", "#7a9cff", "#a2c3ff", "#cbebff"] },
-      "signal-blue-hover": { "role": "primary", "displayName": "Signal Blue Hover", "canonical": "oklch(50.9% 0.206 269.6)", "dark": "#829fff", "tonalRamp": ["#060041", "#0f0e6d", "#22309c", "#3950ce", "#5675f5", "#7a9cff", "#a2c3ff", "#cbebff"] },
-      "alert-coral": { "role": "signal", "displayName": "Alert Coral", "canonical": "oklch(62.9% 0.178 23.7)", "dark": "#ff6b6b", "tonalRamp": ["#2c0000", "#540000", "#7f0415", "#ac282e", "#d44f4f", "#f57b76", "#ffa69f", "#ffd0ca"] },
-      "mention-amber": { "role": "signal", "displayName": "Mention Amber", "canonical": "oklch(96.4% 0.051 92.6)", "dark": "#4a3c00", "tonalRamp": ["#100a00", "#2b250e", "#4a4127", "#6b6141", "#8c8261", "#aea587", "#d2c9ae", "#f6eed6"] },
-      "mention-indigo": { "role": "signal", "displayName": "Mention Indigo", "canonical": "oklch(50.1% 0.196 267.8)", "dark": "#ffd166", "tonalRamp": ["#04003f", "#0b136a", "#1e3398", "#3553c9", "#5377f0", "#789eff", "#a0c5ff", "#caecff"] },
-      "leave-orange": { "role": "signal", "displayName": "Leave Orange", "canonical": "oklch(67.6% 0.155 50.6)", "dark": "#ff9a56", "tonalRamp": ["#270000", "#4c0500", "#752300", "#9f4000", "#c5631c", "#e68b54", "#ffb383", "#ffdcb2"] },
-      "work-teal": { "role": "signal", "displayName": "Work Teal", "canonical": "oklch(58.5% 0.099 230.1)", "dark": "#5ab4d6", "tonalRamp": ["#000e20", "#002a41", "#004966", "#0f6a8c", "#3d8cb0", "#6bafd0", "#97d3f0", "#c4f7ff"] },
-      "online-green": { "role": "signal", "displayName": "Online Green", "canonical": "oklch(74.6% 0.181 152.3)", "dark": "#2ecc71", "tonalRamp": ["#001500", "#003500", "#00560d", "#007a29", "#009e4b", "#49c074", "#80e29e", "#b2ffc9"] },
-      "unread-orange": { "role": "signal", "displayName": "Unread Orange", "canonical": "oklch(78.4% 0.159 73.0)", "dark": "#f5a623", "tonalRamp": ["#220000", "#451400", "#6b3000", "#934e00", "#b77000", "#d79634", "#f8bd6e", "#ffe4a1"] },
-      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(100.0% 0.000 89.9)", "dark": "#1e2126", "tonalRamp": ["#0b0b0b", "#252525", "#424242", "#616161", "#828282", "#a5a5a5", "#c9c9c9", "#eeeeee"] },
-      "neutral-bg": { "role": "neutral", "displayName": "Neutral Canvas", "canonical": "oklch(97.3% 0.003 264.5)", "dark": "#14161a", "tonalRamp": ["#0b0b0c", "#242526", "#414243", "#606163", "#818284", "#a4a5a6", "#c8c9ca", "#eeeef0"] },
-      "border": { "role": "neutral", "displayName": "Border", "canonical": "oklch(91.8% 0.006 264.5)", "dark": "#2c2f36", "tonalRamp": ["#0a0b0d", "#242527", "#414245", "#606164", "#818286", "#a3a5a8", "#c8c9cc", "#edeef1"] },
-      "text": { "role": "neutral", "displayName": "Text", "canonical": "oklch(23.0% 0.012 264.3)", "dark": "#eef0f3", "tonalRamp": ["#090b0f", "#23252a", "#3f4248", "#5e6168", "#7f828a", "#a2a5ac", "#c6c9cf", "#eceef4"] },
-      "text-muted": { "role": "neutral", "displayName": "Text Muted", "canonical": "oklch(55.1% 0.023 264.4)", "dark": "#9aa0aa", "tonalRamp": ["#080b12", "#21252e", "#3d424d", "#5b616e", "#7c8290", "#9fa5b2", "#c3c9d5", "#e9eff9"] }
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "oklch(58.9% 0.206 269.6)",
+        "dark": "#6b85ff",
+        "tonalRamp": [
+          "#060041",
+          "#0f0e6d",
+          "#22309c",
+          "#3950ce",
+          "#5675f5",
+          "#7a9cff",
+          "#a2c3ff",
+          "#cbebff"
+        ]
+      },
+      "signal-blue-hover": {
+        "role": "primary",
+        "displayName": "Signal Blue Hover",
+        "canonical": "oklch(50.9% 0.206 269.6)",
+        "dark": "#829fff",
+        "tonalRamp": [
+          "#060041",
+          "#0f0e6d",
+          "#22309c",
+          "#3950ce",
+          "#5675f5",
+          "#7a9cff",
+          "#a2c3ff",
+          "#cbebff"
+        ]
+      },
+      "alert-coral": {
+        "role": "signal",
+        "displayName": "Alert Coral",
+        "canonical": "oklch(57.0% 0.178 23.7)",
+        "dark": "#ff6b6b",
+        "tonalRamp": [
+          "#2c0000",
+          "#540000",
+          "#7f0415",
+          "#ac282e",
+          "#d44f4f",
+          "#f57b77",
+          "#ffa69f",
+          "#ffd0ca"
+        ]
+      },
+      "alert-coral-fill": {
+        "role": "signal",
+        "displayName": "Alert Coral Fill",
+        "canonical": "oklch(57.9% 0.177 23.5)",
+        "dark": "#d04045",
+        "tonalRamp": [
+          "#2c0000",
+          "#540000",
+          "#7f0416",
+          "#ac282f",
+          "#d44f4f",
+          "#f57b77",
+          "#ffa6a0",
+          "#ffd0ca"
+        ]
+      },
+      "mention-amber": {
+        "role": "signal",
+        "displayName": "Mention Amber",
+        "canonical": "oklch(96.4% 0.051 92.6)",
+        "dark": "#4a3c00",
+        "tonalRamp": [
+          "#100a00",
+          "#2b250e",
+          "#4a4127",
+          "#6b6141",
+          "#8c8261",
+          "#aea587",
+          "#d2c9ae",
+          "#f6eed6"
+        ]
+      },
+      "mention-indigo": {
+        "role": "signal",
+        "displayName": "Mention Indigo",
+        "canonical": "oklch(50.1% 0.196 267.8)",
+        "dark": "#ffd166",
+        "tonalRamp": [
+          "#04003f",
+          "#0b136a",
+          "#1e3398",
+          "#3553c9",
+          "#5377f0",
+          "#789eff",
+          "#a0c5ff",
+          "#caecff"
+        ]
+      },
+      "leave-orange": {
+        "role": "signal",
+        "displayName": "Leave Orange",
+        "canonical": "oklch(67.6% 0.155 50.6)",
+        "dark": "#ff9a56",
+        "tonalRamp": [
+          "#270000",
+          "#4c0500",
+          "#752300",
+          "#9f4000",
+          "#c5631c",
+          "#e68b54",
+          "#ffb383",
+          "#ffdcb2"
+        ]
+      },
+      "work-teal": {
+        "role": "signal",
+        "displayName": "Work Teal",
+        "canonical": "oklch(58.5% 0.099 230.1)",
+        "dark": "#5ab4d6",
+        "tonalRamp": [
+          "#000e20",
+          "#002a41",
+          "#004966",
+          "#0f6a8c",
+          "#3d8cb0",
+          "#6bafd0",
+          "#97d3f0",
+          "#c4f7ff"
+        ]
+      },
+      "online-green": {
+        "role": "signal",
+        "displayName": "Online Green",
+        "canonical": "oklch(74.6% 0.181 152.3)",
+        "dark": "#2ecc71",
+        "tonalRamp": [
+          "#001500",
+          "#003500",
+          "#00560d",
+          "#007a29",
+          "#009e4b",
+          "#49c074",
+          "#80e29e",
+          "#b2ffc9"
+        ]
+      },
+      "unread-orange": {
+        "role": "signal",
+        "displayName": "Unread Orange",
+        "canonical": "oklch(55.6% 0.129 60.9)",
+        "dark": "#f5a623",
+        "tonalRamp": [
+          "#210000",
+          "#441400",
+          "#6a3000",
+          "#914d00",
+          "#b66f28",
+          "#d7945a",
+          "#f7bb88",
+          "#ffe2b6"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(100.0% 0.000 89.9)",
+        "dark": "#1e2126",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "neutral-bg": {
+        "role": "neutral",
+        "displayName": "Neutral Canvas",
+        "canonical": "oklch(97.3% 0.003 264.5)",
+        "dark": "#14161a",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242526",
+          "#414243",
+          "#606163",
+          "#818284",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#eeeef0"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "oklch(91.8% 0.006 264.5)",
+        "dark": "#2c2f36",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414245",
+          "#606164",
+          "#818286",
+          "#a3a5a8",
+          "#c8c9cc",
+          "#edeef1"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Text",
+        "canonical": "oklch(23.0% 0.012 264.3)",
+        "dark": "#eef0f3",
+        "tonalRamp": [
+          "#090b0f",
+          "#23252a",
+          "#3f4248",
+          "#5e6168",
+          "#7f828a",
+          "#a2a5ac",
+          "#c6c9cf",
+          "#eceef4"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Text Muted",
+        "canonical": "oklch(55.1% 0.023 264.4)",
+        "dark": "#9aa0aa",
+        "tonalRamp": [
+          "#080b12",
+          "#21252e",
+          "#3d424d",
+          "#5b616e",
+          "#7c8290",
+          "#9fa5b2",
+          "#c3c9d5",
+          "#e9eff9"
+        ]
+      }
     },
     "typographyMeta": {
-      "headline": { "displayName": "Headline", "purpose": "The login screen's title — the only page-level headline in the app." },
-      "title": { "displayName": "Title", "purpose": "Section and modal headers (panel headers, chat header, modal titles)." },
-      "subtitle": { "displayName": "Subtitle", "purpose": "Login subtext, form inputs, and compact section sub-headers (calendar/list panel titles, Excel section headings)." },
-      "body": { "displayName": "Body", "purpose": "Default UI text — buttons, list rows, message text." },
-      "label": { "displayName": "Label", "purpose": "Emphasized micro-text — table column headers, admin sub-group headings." },
-      "caption": { "displayName": "Caption", "purpose": "The smallest tier — badge text, meta/timestamp lines, calendar weekday labels." }
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The login screen's title — the only page-level headline in the app."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section and modal headers (panel headers, chat header, modal titles)."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "Login subtext, form inputs, and compact section sub-headers (calendar/list panel titles, Excel section headings)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI text — buttons, list rows, message text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Emphasized micro-text — table column headers, admin sub-group headings."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "The smallest tier — badge text, meta/timestamp lines, calendar weekday labels."
+      }
     },
     "shadows": [
-      { "name": "floating-panel", "value": "0 4px 16px rgba(0, 0, 0, 0.18)", "purpose": "Reaction picker and @-mention autocomplete dropdown — the only resting-shadow surfaces in the system." },
-      { "name": "knob-lift", "value": "0 1px 2px rgba(0, 0, 0, 0.25)", "purpose": "The visibility-toggle switch's sliding knob." },
-      { "name": "modal-scrim", "value": "rgba(0, 0, 0, 0.45)", "purpose": "Full-viewport dimming background behind a modal; the modal card itself stays flat/bordered, not shadowed." },
-      { "name": "sidebar-scrim", "value": "rgba(0, 0, 0, 0.35)", "purpose": "Lighter backdrop behind the off-canvas sidebar drawer below 1024px — a navigation surface, not an interrupting one, so it dims less than the modal scrim." }
+      {
+        "name": "floating-panel",
+        "value": "0 4px 16px rgba(0, 0, 0, 0.18)",
+        "purpose": "Reaction picker and @-mention autocomplete dropdown — the only resting-shadow surfaces in the system."
+      },
+      {
+        "name": "knob-lift",
+        "value": "0 1px 2px rgba(0, 0, 0, 0.25)",
+        "purpose": "The visibility-toggle switch's sliding knob."
+      },
+      {
+        "name": "modal-scrim",
+        "value": "rgba(0, 0, 0, 0.45)",
+        "purpose": "Full-viewport dimming background behind a modal; the modal card itself stays flat/bordered, not shadowed."
+      },
+      {
+        "name": "sidebar-scrim",
+        "value": "rgba(0, 0, 0, 0.35)",
+        "purpose": "Lighter backdrop behind the off-canvas sidebar drawer below 1024px — a navigation surface, not an interrupting one, so it dims less than the modal scrim."
+      }
     ],
     "motion": [
-      { "name": "standard-ease", "value": "0.2s ease", "purpose": "The single transition timing used everywhere: toggle switch, sidebar slide-in, toast enter/exit." }
+      {
+        "name": "standard-ease",
+        "value": "0.2s ease",
+        "purpose": "The single transition timing used everywhere: toggle switch, sidebar slide-in, toast enter/exit."
+      }
     ],
     "breakpoints": [
-      { "name": "collapse", "value": "720px" },
-      { "name": "sidebar-rail", "value": "1024px" }
+      {
+        "name": "collapse",
+        "value": "720px"
+      },
+      {
+        "name": "sidebar-rail",
+        "value": "1024px"
+      }
     ]
   },
   "components": [
@@ -62,17 +332,49 @@
       "name": "Danger Button",
       "kind": "button",
       "refersTo": "button-danger",
-      "description": "Destructive actions only — delete room/message/user, demote admin.",
+      "description": "Destructive actions only — delete room/message/user, demote admin. Uses the fill-role token (Alert Coral Fill), not the text-role Alert Coral token, since white text sits on top of it.",
       "html": "<button class=\"ds-btn-danger\">삭제</button>",
-      "css": ".ds-btn-danger { background: var(--danger); color: #fff; border: 1px solid var(--danger); border-radius: 8px; padding: 6px 12px; font-family: inherit; font-size: 13px; cursor: pointer; }"
+      "css": ".ds-btn-danger { background: var(--danger-fill); color: #fff; border: 1px solid var(--danger-fill); border-radius: 8px; padding: 6px 12px; font-family: inherit; font-size: 13px; cursor: pointer; }"
     },
     {
       "name": "Unread Count Badge",
       "kind": "chip",
       "refersTo": "badge-count",
-      "description": "Per-room and sidebar unread-message counter. Inverts to white-on-coral when placed on the already-blue active nav link.",
+      "description": "Per-room and sidebar unread-message counter. Inverts to white-bg/coral-text when placed on the already-blue active nav link. Uses the fill-role token (Alert Coral Fill).",
       "html": "<span class=\"ds-badge-count\">3</span>",
-      "css": ".ds-badge-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }"
+      "css": ".ds-badge-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger-fill); color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "Message-level and file-affordance actions (react, view reactors, delete a message, attach a file, drag-and-drop overlay) — inline Feather-style SVG, stroke=currentColor so it inherits the button's own color/hover state, plus a Korean title/aria-label. Replaces raw emoji glyphs (🙂+/🗑/👥/📎) that carried no real affordance and often no accessible label at all. The theme toggle (🌙/☀️), room-visibility (🔒/🔓), and the reaction picker's emoji are deliberately unaffected — those emoji carry real-world or content meaning, not UI-chrome.",
+      "html": "<button type=\"button\" class=\"ds-icon-btn\" title=\"메시지 삭제\" aria-label=\"메시지 삭제\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"3 6 5 6 21 6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/></svg></button>",
+      "css": ".ds-icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 2px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; } .ds-icon-btn:hover { opacity: 0.7; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Non-blocking, self-dismissing status notice (showToast(text)). Originally for mention notifications, now the default for any transient status the app needs to tell the user (reaction/delete/upload errors, room-membership/deletion notices) — replacing what used to be alert(). A couple of call sites that redirect right after showing one delay the navigation by ~1.5s so the toast is actually readable, since unlike alert() it doesn't block.",
+      "html": "<div class=\"ds-toast\">전송에 실패했습니다.</div>",
+      "css": ".ds-toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,0.18); transition: opacity 0.2s ease, transform 0.2s ease; }"
+    },
+    {
+      "name": "Selection Modal",
+      "kind": "custom",
+      "refersTo": "panel",
+      "description": "Themed modal for picking one person from a list and acting on them (초대할 사용자 선택 in 참여 인원; 새 방장 in 방장 위임) — replaces a native prompt(). Same modal chrome as Confirm Modal, with a single native <select> as the body instead of a message.",
+      "html": "<div class=\"ds-modal-overlay\"><div class=\"ds-modal\"><h2 class=\"ds-modal-title\">방장 위임</h2><label>새 방장<select class=\"ds-input\"></select></label><div class=\"ds-modal-actions\"><button class=\"ds-btn-ghost\">취소</button><button class=\"ds-btn-secondary\">위임</button></div></div></div>",
+      "css": ".ds-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; } .ds-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 560px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }"
+    },
+    {
+      "name": "Broken Image Fallback",
+      "kind": "custom",
+      "refersTo": "msg-image-fallback",
+      "description": "Swapped in for an image message's <img> on load failure (404, corrupt file, network error), instead of leaving the browser's own broken-image icon exposed. Fixed 180x120px, dashed border, centered broken-image icon + \"이미지를 불러올 수 없습니다\" text.",
+      "html": "<div class=\"ds-msg-image-fallback\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M3 15l4-4a2 2 0 0 1 3 0l5 5\"/><line x1=\"16\" y1=\"8\" x2=\"16\" y2=\"8\"/></svg><span>이미지를 불러올 수 없습니다</span></div>",
+      "css": ".ds-msg-image-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 180px; height: 120px; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: 12px; }"
     },
     {
       "name": "Reaction Pill",
@@ -96,7 +398,7 @@
       "refersTo": "sidebar-link",
       "description": "App-shell navigation row. Active state fills solid primary with a text-colored left accent bar — the only left-border accent in the system.",
       "html": "<a class=\"ds-sidebar-link ds-active\">채팅 <span class=\"ds-badge-count\">3</span></a>",
-      "css": ".ds-sidebar-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); border-left: 3px solid transparent; background: var(--bg); color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; } .ds-sidebar-link.ds-active { background: var(--primary); color: var(--primary-text); border-color: var(--primary); border-left-color: var(--text); } .ds-sidebar-link.ds-active .ds-badge-count { background: #fff; color: var(--danger); }"
+      "css": ".ds-sidebar-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); border-left: 3px solid transparent; background: var(--bg); color: var(--text-muted); font-weight: 600; font-size: 13px; text-decoration: none; } .ds-sidebar-link.ds-active { background: var(--primary); color: var(--primary-text); border-color: var(--primary); border-left-color: var(--text); } .ds-sidebar-link.ds-active .ds-badge-count { background: #fff; color: var(--danger-fill); }"
     },
     {
       "name": "Text Field",
@@ -118,14 +420,14 @@
       "name": "Confirm Modal",
       "kind": "custom",
       "refersTo": "panel",
-      "description": "Shared themed confirmation for every destructive action (delete room/message/user/issue/schedule, demote/promote admin), replacing native confirm() — the desktop (Electron) build was found to leave input dead after a native dialog closes.",
+      "description": "Shared themed confirmation for every destructive action (delete room/message/user/issue/schedule, demote/promote admin), replacing native confirm() — the desktop (Electron) build was found to leave input dead after a native dialog closes. A generic app-wide Escape handler (modal-escape.js) now also closes any other visible .modal-overlay by delegating to its own .modal-close button, so every modal in the system — not just this one — closes on Escape.",
       "html": "<div class=\"ds-modal-overlay\"><div class=\"ds-modal\"><h2 class=\"ds-modal-title\">확인</h2><p>정말 이 방을 삭제하시겠습니까?</p><div class=\"ds-modal-actions\"><button class=\"ds-btn-ghost\">취소</button><button class=\"ds-btn-danger\">확인</button></div></div></div>",
-      "css": ".ds-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; } .ds-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 560px; padding: 20px; display: flex; flex-direction: column; gap: 12px; } .ds-modal-title { margin: 0; font-size: 16px; } .ds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; } .ds-btn-ghost { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; } .ds-btn-danger { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--danger); background: var(--danger); color: #fff; font-size: 13px; cursor: pointer; }"
+      "css": ".ds-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; } .ds-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 560px; padding: 20px; display: flex; flex-direction: column; gap: 12px; } .ds-modal-title { margin: 0; font-size: 16px; } .ds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; } .ds-btn-ghost { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; } .ds-btn-danger { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--danger-fill); background: var(--danger-fill); color: #fff; font-size: 13px; cursor: pointer; }"
     }
   ],
   "narrative": {
     "northStar": "The Shift Log",
-    "overview": "TeamChat reads like a tool people duck into mid-task, not a product they spend time in. Everything about it — the flat gray panels, the single blue accent reserved for one action per screen, the system font stack with a Korean fallback baked in — says internal utility over showcase. It is calm and unapologetically plain: no illustration, no marketing chrome, no attempt to feel like a consumer chat app. The restraint isn't cold, though — rounded corners on nearly everything (8–12px, going fully pill-shaped for anything that's a count or a tag), soft emoji used as functional icons (🌙/☀️ for theme, 🔒 for private rooms, colored dots for status), and a warm amber highlight for mentions keep it from reading as sterile. The overall character the team confirmed: restrained, but warm.\n\nThe system is fully dark-mode mirrored via a data-theme attribute the user toggles explicitly (falling back to prefers-color-scheme when unset) — every token has a light and dark value, and both are load-bearing, not an afterthought.",
+    "overview": "TeamChat reads like a tool people duck into mid-task, not a product they spend time in. Everything about it — the flat gray panels, the single blue accent reserved for one action per screen, the system font stack with a Korean fallback baked in — says internal utility over showcase. It is calm and unapologetically plain: no illustration, no marketing chrome, no attempt to feel like a consumer chat app. The restraint isn't cold, though — rounded corners on nearly everything (8–12px, going fully pill-shaped for anything that's a count or a tag), a small set of semantic emoji kept where the glyph itself carries real-world meaning (🌙/☀️ for theme, 🔒/🔓 for room visibility, 🟢/⚪ for online status), minimal stroke-style SVG icons for message-level and file actions, and a warm amber highlight for mentions keep it from reading as sterile. The overall character the team confirmed: restrained, but warm.\n\nThe system is fully dark-mode mirrored via a data-theme attribute the user toggles explicitly (falling back to prefers-color-scheme when unset) — every token has a light and dark value, and both are load-bearing, not an afterthought.",
     "keyCharacteristics": [
       "One accent color (signal-blue) used sparingly, for the single primary action on a screen — not scattered across secondary buttons.",
       "Flat by default: every resting surface (panel, card, button, input) is bordered, not shadowed.",
@@ -134,10 +436,31 @@
       "Full light/dark parity — no color exists in only one theme."
     ],
     "rules": [
-      { "name": "The One Accent Rule", "body": "Signal Blue appears on at most one control per screen — the primary action. Secondary, danger, and ghost buttons all stay neutral; adding blue to more than the single primary action breaks the system's restraint.", "section": "colors" },
-      { "name": "The Border-Not-Shadow Rule", "body": "A surface's edge is drawn with a 1px border in the neutral border color, never a shadow. Shadows are reserved for floating layers only.", "section": "colors" },
-      { "name": "The Two-Weight Rule", "body": "Text is either regular body weight or bumped to 600–700 for emphasis (names, titles, badges) — there is no intermediate 500 weight anywhere in the system.", "section": "typography" },
-      { "name": "The Grounded-Except-Floating Rule", "body": "If it sits in the document flow, it's flat and bordered. If it floats above the page (picker, dropdown, scrim), it gets a shadow. Nothing in between.", "section": "elevation" }
+      {
+        "name": "The One Accent Rule",
+        "body": "Signal Blue appears on at most one control per screen — the primary action. Secondary, danger, and ghost buttons all stay neutral; adding blue to more than the single primary action breaks the system's restraint.",
+        "section": "colors"
+      },
+      {
+        "name": "The Border-Not-Shadow Rule",
+        "body": "A surface's edge is drawn with a 1px border in the neutral border color, never a shadow. Shadows are reserved for floating layers only.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two-Weight Rule",
+        "body": "Text is either regular body weight or bumped to 600–700 for emphasis (names, titles, badges) — there is no intermediate 500 weight anywhere in the system.",
+        "section": "typography"
+      },
+      {
+        "name": "The Grounded-Except-Floating Rule",
+        "body": "If it sits in the document flow, it's flat and bordered. If it floats above the page (picker, dropdown, scrim), it gets a shadow. Nothing in between.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Text-vs-Fill Rule",
+        "body": "Any signal color used both as text-on-neutral-bg and as a fill-carrying-white-text needs two tokens, not one — the two roles pull lightness in opposite directions in dark mode. Alert Coral / Alert Coral Fill is the concrete instance; apply the same split before reusing a signal color in a new fill context.",
+        "section": "colors"
+      }
     ],
     "dos": [
       "Do keep Signal Blue on exactly one control per screen (The One Accent Rule) — don't reach for it as a general \"important button\" color.",
@@ -152,7 +475,7 @@
       "Don't introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.",
       "Don't give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional.",
       "Don't size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard — widgets sharing that grid should stay compact enough that every region stays usable.",
-      "Don't use the native confirm()/prompt()/alert() for a new destructive action — use window.confirmDialog(message) instead, the known cause of dead renderer input in the desktop build."
+      "Don't use a native confirm(), prompt(), or alert() anywhere — use window.confirmDialog(message) for a yes/no decision, showToast(text) for a status notice, and a themed modal + select for picking from a list. The native dialogs are the known cause of dead renderer input in the desktop build."
     ]
   }
 }
