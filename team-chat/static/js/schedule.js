@@ -283,6 +283,17 @@
 
       calGrid.appendChild(cell);
     }
+
+    // 한 달이 5주로 끝나든 6주로 끝나든 항상 6행(42칸)을 채워서, 달마다 캘린더
+    // 전체 높이가 바뀌지 않게 한다(대시보드에 얹혀 있어 이게 바뀌면 아래 일정
+    // 목록/그 위 채팅방·1:1대화 행까지 같이 흔들린다).
+    const CAL_ROWS = 6;
+    const trailingEmpty = CAL_ROWS * 7 - (startWeekday + daysInMonth);
+    for (let i = 0; i < trailingEmpty; i++) {
+      const cell = document.createElement("div");
+      cell.className = "sched-cal-cell empty";
+      calGrid.appendChild(cell);
+    }
   }
 
   function renderList() {
