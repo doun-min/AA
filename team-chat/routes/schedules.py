@@ -1,6 +1,5 @@
 from flask import Blueprint, abort, jsonify, request, session
 
-import config
 import db
 from extensions import socketio
 
@@ -26,53 +25,12 @@ def _format_entry(s):
     return s["title"]
 
 
-def _format_range(schedule):
-    date = schedule["date"]
-    end_date = schedule.get("end_date") or date
-    start_time = schedule.get("start_time")
-    end_time = schedule.get("end_time")
-
-    start = f"{date} {start_time}" if start_time else date
-    if end_date == date:
-        end = end_time or ""
-    else:
-        end = f"{end_date} {end_time}" if end_time else end_date
-    if not end:
-        return start
-    return f"{start} ~ {end}"
-
-
 def format_banner(schedules):
     if not schedules:
         return "오늘 등록된 일정이 없습니다."
     return "오늘 일정: " + " | ".join(_format_entry(s) for s in schedules)
 
 
-def _format_detail(schedule):
-    label = CATEGORY_LABELS.get(schedule["category"], schedule["category"])
-    if schedule["category"] == "work":
-        return f"{_format_range(schedule)} {schedule['title']}"
-    if schedule.get("end_date") and schedule["end_date"] != schedule["date"]:
-        return f"{schedule['date']} ~ {schedule['end_date']} {label}"
-    return f"{schedule['date']} {label}"
-
-
-def _notify_schedule_room(nickname, schedule, action):
-    room = db.get_room_by_name(config.SCHEDULE_ROOM_NAME)
-    if not room:
-        return
-    text = f"[일정{action}] {nickname}님이 일정을 {action}했습니다: {_format_detail(schedule)}"
-    msg = db.add_message(room["id"], nickname, "system", content=text)
-    payload = {
-        "id": msg["id"],
-        "room_id": room["id"],
-        "sender": nickname,
-        "type": "system",
-        "content": text,
-        "created_at": msg["created_at"],
-        "unread_count": 0,
-    }
-    socketio.emit("new_message", payload, room=str(room["id"]))
 
 
 def _validate_body(body, require_all=True):
@@ -140,7 +98,6 @@ def create_schedule():
         nickname, data["category"], data["title"], data["date"],
         data["end_date"], data["start_time"], data["end_time"],
     )
-    _notify_schedule_room(nickname, schedule, "등록")
     socketio.emit("schedule_updated", {"date": schedule["date"]})
     return jsonify(schedule=schedule), 201
 
@@ -164,7 +121,6 @@ def update_schedule(schedule_id):
         schedule_id, data["category"], data["title"], data["date"],
         data["end_date"], data["start_time"], data["end_time"],
     )
-    _notify_schedule_room(nickname, schedule, "수정")
     socketio.emit("schedule_updated", {"date": old_date})
     if schedule["date"] != old_date:
         socketio.emit("schedule_updated", {"date": schedule["date"]})

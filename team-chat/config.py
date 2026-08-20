@@ -26,6 +26,8 @@ IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 INITIAL_ADMIN_NICKNAME = "test11"
 
 GLOBAL_ROOM_NAME = "전체"
+# 더 이상 새로 만들지 않는다 — 예전에 이미 생성된 방을 찾아 삭제 가능하게 풀어주는
+# 1회성 마이그레이션(db.init_db)에서만 쓰인다.
 SCHEDULE_ROOM_NAME = "일정공유"
 
 # @전체 라고 멘션하면 방 참여자 전원에게 멘션한 것으로 처리한다 (sockets.py).

@@ -250,13 +250,14 @@ def init_db():
                 "VALUES (?,?,?,?,?,0)",
                 (config.GLOBAL_ROOM_NAME, "global", None, None, _now()),
             )
-        cur.execute("SELECT id FROM rooms WHERE type='group' AND name=? LIMIT 1", (config.SCHEDULE_ROOM_NAME,))
-        if cur.fetchone() is None:
-            cur.execute(
-                "INSERT INTO rooms (name, type, owner_nickname, created_by, created_at, is_deletable) "
-                "VALUES (?,?,?,?,?,0)",
-                (config.SCHEDULE_ROOM_NAME, "group", None, None, _now()),
-            )
+        # "일정공유" 방은 더 이상 자동으로 만들지 않는다(일정 알림을 채팅 로그로 남기던
+        # 용도였는데, 캘린더가 대시보드에 항상 보이고 소켓으로 실시간 갱신되면서 필요
+        # 없어짐). 예전에 이미 만들어져 있던 방은 삭제 안 되게 막혀 있었으므로, 여기서
+        # 한 번만 풀어줘서 관리자가 원할 때 UI에서 직접 지울 수 있게 한다.
+        cur.execute(
+            "UPDATE rooms SET is_deletable=1 WHERE type='group' AND name=? AND is_deletable=0",
+            (config.SCHEDULE_ROOM_NAME,),
+        )
         # 기존에 공개방을 한 번도 방문하지 않아 room_participants에서 빠져 있던
         # 사용자를 기동 시점에 한 번 맞춰준다(과거 데이터 백필).
         _sync_public_room_participants(cur)
@@ -319,13 +320,6 @@ def delete_user_account(nickname):
 def get_room(room_id):
     with db_cursor() as cur:
         cur.execute("SELECT * FROM rooms WHERE id=?", (room_id,))
-        row = cur.fetchone()
-        return dict(row) if row else None
-
-
-def get_room_by_name(name):
-    with db_cursor() as cur:
-        cur.execute("SELECT * FROM rooms WHERE name=? LIMIT 1", (name,))
         row = cur.fetchone()
         return dict(row) if row else None
 
