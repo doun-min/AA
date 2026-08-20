@@ -113,6 +113,14 @@
       "description": "The base container for room lists, the schedule calendar, and other grouped content. Flat — border only, no shadow.",
       "html": "<div class=\"ds-panel\">패널 콘텐츠</div>",
       "css": ".ds-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }"
+    },
+    {
+      "name": "Confirm Modal",
+      "kind": "custom",
+      "refersTo": "panel",
+      "description": "Shared themed confirmation for every destructive action (delete room/message/user/issue/schedule, demote/promote admin), replacing native confirm() — the desktop (Electron) build was found to leave input dead after a native dialog closes.",
+      "html": "<div class=\"ds-modal-overlay\"><div class=\"ds-modal\"><h2 class=\"ds-modal-title\">확인</h2><p>정말 이 방을 삭제하시겠습니까?</p><div class=\"ds-modal-actions\"><button class=\"ds-btn-ghost\">취소</button><button class=\"ds-btn-danger\">확인</button></div></div></div>",
+      "css": ".ds-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; } .ds-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 100%; max-width: 560px; padding: 20px; display: flex; flex-direction: column; gap: 12px; } .ds-modal-title { margin: 0; font-size: 16px; } .ds-modal-actions { display: flex; justify-content: flex-end; gap: 8px; } .ds-btn-ghost { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; } .ds-btn-danger { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--danger); background: var(--danger); color: #fff; font-size: 13px; cursor: pointer; }"
     }
   ],
   "narrative": {
@@ -143,7 +151,8 @@
       "Don't add hover or focus-visible styling to a button, panel, or list row and assume it matches an existing pattern — most of the system has none; only reaction pills, table rows, calendar cells, the mention-autocomplete list, and .btn-primary currently define hover feedback.",
       "Don't introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.",
       "Don't give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional.",
-      "Don't size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard — widgets sharing that grid should stay compact enough that every region stays usable."
+      "Don't size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard — widgets sharing that grid should stay compact enough that every region stays usable.",
+      "Don't use the native confirm()/prompt()/alert() for a new destructive action — use window.confirmDialog(message) instead, the known cause of dead renderer input in the desktop build."
     ]
   }
 }

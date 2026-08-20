@@ -47,5 +47,25 @@
 <div class="app-content">
 {% block body %}{% endblock %}
 </div>
+
+<!-- 삭제 등 위험한 동작 확인용 공용 모달. 네이티브 confirm()/prompt()은 데스크톱(Electron)
+     앱에서 대화상자를 닫은 뒤 렌더러 입력이 먹통이 되는 경우가 있어, 모든 삭제 확인은
+     이 테마 모달을 쓴다(confirm-modal.js). -->
+<div id="confirm-modal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="confirm-modal-title">확인</h2>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-modal-message"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn-ghost" id="confirm-modal-cancel">취소</button>
+        <button type="button" class="btn-danger" id="confirm-modal-ok">확인</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/confirm-modal.js') }}"></script>
 </body>
 </html>

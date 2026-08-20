@@ -2,7 +2,7 @@
   function bindDeleteUserButton(btn) {
     btn.addEventListener("click", async () => {
       const target = btn.dataset.nickname;
-      if (!confirm(`${target}님의 계정을 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
+      if (!(await window.confirmDialog(`${target}님의 계정을 완전히 삭제할까요? 되돌릴 수 없습니다.`))) return;
       const res = await fetch(`/api/users/${encodeURIComponent(target)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -16,7 +16,7 @@
   function bindDemoteAdminButton(btn) {
     btn.addEventListener("click", async () => {
       const target = btn.dataset.nickname;
-      if (!confirm(`${target}님의 관리자 권한을 해제할까요?`)) return;
+      if (!(await window.confirmDialog(`${target}님의 관리자 권한을 해제할까요?`))) return;
       const res = await fetch(`/api/admins/${encodeURIComponent(target)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -35,7 +35,7 @@
       if (adminManageError) adminManageError.textContent = "";
       const target = promoteAdminSelect.value;
       if (!target) return;
-      if (!confirm(`${target}님을 관리자로 지정할까요?`)) return;
+      if (!(await window.confirmDialog(`${target}님을 관리자로 지정할까요?`))) return;
       const res = await fetch("/api/admins", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

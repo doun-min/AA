@@ -287,7 +287,7 @@
   deleteBtn.addEventListener("click", async () => {
     const id = issueIdInput.value;
     if (!id) return;
-    if (!window.confirm("이 이슈를 삭제하시겠습니까?")) return;
+    if (!(await window.confirmDialog("이 이슈를 삭제하시겠습니까?"))) return;
     try {
       const res = await fetch(`/api/issues/${id}`, { method: "DELETE" });
       if (!res.ok) {

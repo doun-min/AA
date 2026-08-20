@@ -502,7 +502,7 @@
   deleteBtn.addEventListener("click", async () => {
     const id = formId.value;
     if (!id) return;
-    if (!confirm("이 일정을 삭제하시겠습니까?")) return;
+    if (!(await window.confirmDialog("이 일정을 삭제하시겠습니까?"))) return;
     try {
       const res = await fetch(`/api/schedules/${id}`, { method: "DELETE" });
       const data = await res.json();

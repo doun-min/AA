@@ -263,6 +263,13 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Timing:** the thumb fades using the same 0.2s ease transition as every other state change in the system (see the Two-Weight-adjacent single-timing convention in Elevation). It reappears immediately on scroll and holds for ~900ms of inactivity before fading back out — modeled on KakaoTalk's chat-room scrollbar.
 - Implemented via themed `::-webkit-scrollbar` pseudo-elements plus a small global scroll listener (`scrollbars.js`) that toggles an `.is-scrolling` class; Firefox gets the same colors through `scrollbar-color` without the fade (an accepted platform limitation, not a redesign).
 
+### Confirm Modal (signature interaction)
+- Every destructive/dangerous confirmation (delete a room, a message, a user account, an issue, a schedule entry, a log range; demote/promote an admin) goes through one shared themed modal (`#confirm-modal`, driven by `confirm-modal.js`'s `window.confirmDialog(message)`) instead of the browser's native `confirm()`.
+- **Why:** native `confirm()`/`prompt()` were found to leave renderer input dead after the dialog closes in the Electron desktop build (it stays tray-resident and hides/shows its window rather than being destroyed, which appears to be what triggers it) — a themed in-page modal sidesteps the native dialog entirely.
+- **Look:** identical to every other modal — `{colors.surface}` card, 1px border, no shadow, centered over the standard `rgba(0,0,0,0.45)` scrim. Title "확인", the message as body text, `.btn-ghost` "취소" + `.btn-danger` "확인" in `.modal-actions`.
+- **Behavior:** resolves a Promise (`true`/`false`) so call sites read exactly like the native API did — `if (!(await confirmDialog(msg))) return;`. Backdrop click, Escape, and Enter all work (cancel / cancel / confirm respectively).
+- Markup lives once in `base.html` (available on every page); don't add a second instance or a page-local variant.
+
 ### Calendar Cell (signature component)
 - Day cells show small colored dots (Leave Orange / Work Teal) for entries on that day, plus a bar that visually spans from a range's start cell to its end cell (achieved with negative margins so adjacent-day bars touch with no gap).
 - The "today" cell gets a `{colors.neutral-bg}` fill and bold date; a user-selected cell instead gets a `{colors.signal-blue}` border.
@@ -283,3 +290,4 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 - **Don't** introduce a second brand/accent color for a new feature. The palette is deliberately one action color plus role-bound signal colors (danger, mention, and the two schedule categories) — a new feature should reuse one of these roles, not add a new hue.
 - **Don't** give English marketing copy or decorative illustration a home here — every string in the product is Korean, and the tone is internal-tool plain, not promotional (see PRODUCT.md's Positioning and Evidence on Hand).
 - **Don't** size a widget for the standalone page it used to be once it's embedded in the shared rooms dashboard (`.layout`'s `auto` schedule row sizes to content — a full-size calendar squeezed 채팅방/1:1 대화 down to almost nothing). Widgets sharing that grid should stay compact enough that every region stays usable.
+- **Don't** use the native `confirm()`/`prompt()`/`alert()` for a new destructive action — use `window.confirmDialog(message)` (see Confirm Modal). The native dialogs are the known cause of dead renderer input in the desktop build.

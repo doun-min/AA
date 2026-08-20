@@ -212,7 +212,7 @@
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!confirm("정말 이 방을 삭제하시겠습니까?")) return;
+      if (!(await window.confirmDialog("정말 이 방을 삭제하시겠습니까?"))) return;
       const roomId = btn.dataset.roomId;
       const res = await fetch(`/api/rooms/${roomId}`, { method: "DELETE" });
       const data = await res.json();

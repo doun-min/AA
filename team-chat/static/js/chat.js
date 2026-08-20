@@ -271,7 +271,7 @@
   }
 
   async function deleteMessage(msgId) {
-    if (!confirm("메시지를 삭제할까요?")) return;
+    if (!(await window.confirmDialog("메시지를 삭제할까요?"))) return;
     try {
       const res = await fetch(`/api/messages/${msgId}`, { method: "DELETE" });
       if (!res.ok) {
@@ -344,7 +344,7 @@
         clearLogError.textContent = "시작일이 종료일보다 늦을 수 없습니다.";
         return;
       }
-      if (!confirm(`${start}부터 ${end}까지의 로그를 삭제합니다.\n계속하시겠습니까?`)) return;
+      if (!(await window.confirmDialog(`${start}부터 ${end}까지의 로그를 삭제합니다.\n계속하시겠습니까?`))) return;
 
       try {
         const res = await fetch(`/api/rooms/${roomId}/messages`, {
@@ -685,7 +685,7 @@
 
   if (deleteBtn) {
     deleteBtn.addEventListener("click", async () => {
-      if (!confirm("정말 이 방을 삭제하시겠습니까?")) return;
+      if (!(await window.confirmDialog("정말 이 방을 삭제하시겠습니까?"))) return;
       const res = await fetch(`/api/rooms/${roomId}`, { method: "DELETE" });
       const data = await res.json();
       if (res.ok) {
@@ -826,7 +826,7 @@
       const btn = e.target.closest(".btn-remove-member");
       if (!btn) return;
       const target = btn.dataset.nickname;
-      if (!confirm(`${target}님을 방에서 제외하시겠습니까?`)) return;
+      if (!(await window.confirmDialog(`${target}님을 방에서 제외하시겠습니까?`))) return;
       if (participantsError) participantsError.textContent = "";
       try {
         const res = await fetch(`/api/rooms/${roomId}/members/${encodeURIComponent(target)}`, {
