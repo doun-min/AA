@@ -331,16 +331,23 @@ def get_room_by_name(name):
 
 
 def list_group_rooms_for(nickname):
-    """공개 방은 누구나, 비공개 방은 room_participants에 등록된 사람에게만 보인다."""
+    """공개 방은 누구나, 비공개 방은 room_participants에 등록된 사람에게만 보인다.
+    최초 생성된 "전체" 방은 항상 맨 위에 고정하고, 나머지는 새 메시지가 온 방이 위로
+    올라오도록(메시지 없는 새 방은 생성 시각으로) 최근 활동순 정렬한다."""
     with db_cursor() as cur:
         cur.execute(
             """
-            SELECT * FROM rooms
+            SELECT rooms.*,
+                   COALESCE(
+                       (SELECT MAX(created_at) FROM messages WHERE room_id = rooms.id),
+                       rooms.created_at
+                   ) AS last_activity_at
+            FROM rooms
             WHERE type IN ('global','group')
               AND (is_private = 0 OR id IN (
                   SELECT room_id FROM room_participants WHERE nickname = ?
               ))
-            ORDER BY (type='global') DESC, created_at ASC
+            ORDER BY (type='global') DESC, last_activity_at DESC
             """,
             (nickname,),
         )
@@ -448,16 +455,22 @@ def get_or_create_direct_room(nick_a, nick_b):
 
 
 def list_direct_rooms_for(nickname):
+    """1:1 대화 목록: 새 메시지가 온 방이 위로 올라오도록(아직 메시지가 없는 갓
+    만들어진 방은 방 생성 시각으로) 최근 활동순 정렬한다."""
     with db_cursor() as cur:
         cur.execute(
             """
             SELECT r.id, r.created_at,
                    (SELECT dp2.nickname FROM direct_participants dp2
-                    WHERE dp2.room_id = r.id AND dp2.nickname != ? LIMIT 1) AS other
+                    WHERE dp2.room_id = r.id AND dp2.nickname != ? LIMIT 1) AS other,
+                   COALESCE(
+                       (SELECT MAX(created_at) FROM messages WHERE room_id = r.id),
+                       r.created_at
+                   ) AS last_activity_at
             FROM rooms r
             JOIN direct_participants dp ON dp.room_id = r.id
             WHERE dp.nickname = ? AND r.type='direct'
-            ORDER BY r.created_at DESC
+            ORDER BY last_activity_at DESC
             """,
             (nickname, nickname),
         )

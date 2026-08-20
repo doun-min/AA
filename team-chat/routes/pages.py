@@ -80,7 +80,8 @@ def rooms_page():
 
     # 1:1 대화 패널: "대화 상대 목록"과 "접속 중인 사용자"가 따로 있으면 같은 사람이 두 번
     # 보여 중복이었다 — 등록된 전체 사용자를 한 목록으로 합치되, 이미 대화방이 있는 사람은
-    # 최근 대화 시작순으로 위쪽에, 아직 대화한 적 없는 사람은 접속중 우선으로 그 아래에 둔다.
+    # 최근 메시지가 온 순서로(안 읽었어도 새 메시지가 오면 위로 올라옴) 위쪽에, 아직
+    # 대화한 적 없는 사람은 접속중 우선으로 그 아래에 둔다.
     direct_room_by_other = {r["other"]: r for r in db.list_direct_rooms_for(nickname)}
     with_room = sorted(
         (
@@ -88,7 +89,7 @@ def rooms_page():
             for u in other_nicknames
             if u in direct_room_by_other
         ),
-        key=lambda u: direct_room_by_other[u["nickname"]]["created_at"],
+        key=lambda u: direct_room_by_other[u["nickname"]]["last_activity_at"],
         reverse=True,
     )
     without_room = sorted(
