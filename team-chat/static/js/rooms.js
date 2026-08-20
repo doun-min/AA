@@ -271,6 +271,30 @@
     }
   }
 
+  // 1:1 대화 목록은 최근 메시지 순으로 정렬되고, 처음 대화하는 상대는 "대화 없음" 상태에서
+  // 실제 방이 있는 행으로 바뀌어야 한다 — 배지 숫자만 바꿔서는 순서/등장 자체를 못 바꾸므로
+  // 목록 부분(#direct-people-list)을 통째로 다시 받아 갈아끼운다. 메시지가 연달아 올 때마다
+  // 매번 새로 받지 않도록 짧게 묶어서(디바운스) 한 번만 갱신한다.
+  let directRefreshTimer = null;
+  async function refreshDirectPeoplePanel() {
+    if (!directPeopleList) return;
+    try {
+      const res = await fetch(window.location.pathname);
+      if (!res.ok) throw new Error("refresh failed");
+      const html = await res.text();
+      const freshList = new DOMParser().parseFromString(html, "text/html").getElementById("direct-people-list");
+      if (!freshList) throw new Error("direct-people-list not found");
+      document.getElementById("direct-people-list").replaceWith(freshList);
+      document.querySelectorAll(".btn-dm").forEach(bindDmButton);
+    } catch (err) {
+      // 부분 갱신이 실패해도 다음 이벤트나 새로고침에서 자연스럽게 맞춰지므로 조용히 넘어간다.
+    }
+  }
+  function scheduleDirectPeopleRefresh() {
+    clearTimeout(directRefreshTimer);
+    directRefreshTimer = setTimeout(refreshDirectPeoplePanel, 400);
+  }
+
   const socket = window.ChatNotify && window.ChatNotify.getSocket();
   if (socket) {
     socket.on("unread_count_update", (data) => {
@@ -285,6 +309,7 @@
           badge.textContent = "";
         }
       });
+      scheduleDirectPeopleRefresh();
     });
 
     socket.on("room_member_added", refreshGroupRoomsPanel);
