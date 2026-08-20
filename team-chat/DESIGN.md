@@ -266,7 +266,7 @@ Every bordered surface uses the same 1px, solid, neutral-border-color stroke —
 ### Calendar Cell (signature component)
 - Day cells show small colored dots (Leave Orange / Work Teal) for entries on that day, plus a bar that visually spans from a range's start cell to its end cell (achieved with negative margins so adjacent-day bars touch with no gap).
 - The "today" cell gets a `{colors.neutral-bg}` fill and bold date; a user-selected cell instead gets a `{colors.signal-blue}` border.
-- **Sizing:** cells are compact by design (`min-height: 42px`) — this calendar always shares the rooms-dashboard row with 채팅방/1:1 대화, never a full page of its own, so it stays deliberately small rather than letting a 6-row month grid dominate the layout. Don't grow it back toward a standalone-calendar-app scale.
+- **Sizing:** cells are a fixed `height: 42px` (not `min-height`), with `overflow: hidden` — this calendar always shares the rooms-dashboard row with 채팅방/1:1 대화, never a full page of its own, so it stays deliberately small rather than letting a 6-row month grid dominate the layout. Fixed rather than min matters here specifically: a day with several overlapping schedule bars must clip, not grow the cell (and therefore the whole week row, and therefore the whole dashboard) — schedule.js caps rendered bar tracks at `MAX_BAR_TRACKS = 2` for exactly this reason. Don't grow the cell back toward a standalone-calendar-app scale, and don't raise the track cap without re-checking it still fits in 42px.
 
 ## Do's and Don'ts
 

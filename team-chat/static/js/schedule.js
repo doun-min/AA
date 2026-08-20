@@ -53,7 +53,9 @@
   function barClass(category) {
     return category === "work" ? "sched-bar-work" : "sched-bar-leave";
   }
-  const MAX_BAR_TRACKS = 4;
+  // 대시보드에 얹힌 미니 캘린더라 칸 높이가 고정이다(style.css .sched-cal-cell) —
+  // 겹치는 일정이 많은 날도 이 트랙 수 안에서만 막대를 그려서 칸이 늘어나지 않게 한다.
+  const MAX_BAR_TRACKS = 2;
   // 여러 날에 걸친 일정이 같은 기간 동안 서로 다른 줄(track)에 그려지도록 배정한다.
   // (전형적인 "최소 회의실 개수" 그리디 구간 스케줄링 알고리즘)
   function assignTracks(schedules) {

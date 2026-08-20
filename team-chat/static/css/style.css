@@ -374,8 +374,11 @@ button { font-family: inherit; }
 .sched-cal-grid { column-gap: 0; row-gap: 2px; }
 .sched-cal-cell {
   /* 첫 화면 대시보드에 얹힌 위젯이라 전용 페이지였을 때보다 훨씬 작게 잡는다 —
-     64px였을 땐 캘린더 한 칸이 채팅방/1:1대화 행을 짓눌러 그리드가 깨지는 느낌이었다. */
-  min-height: 42px; border-radius: 6px; border: 1px solid transparent; padding: 4px;
+     64px였을 땐 캘린더 한 칸이 채팅방/1:1대화 행을 짓눌러 그리드가 깨지는 느낌이었다.
+     min-height가 아니라 고정 height + overflow:hidden으로 못 박아서, 그 날 겹치는
+     일정(주황/파랑 막대)이 몇 개든 칸 크기 자체는(그래서 캘린더 전체 높이도) 항상
+     그대로 유지된다 — 넘치는 막대는 그냥 안 그린다(schedule.js의 MAX_BAR_TRACKS). */
+  height: 42px; border-radius: 6px; border: 1px solid transparent; padding: 4px;
   font-size: 11px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
   overflow: hidden;
 }
