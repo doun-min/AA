@@ -165,7 +165,13 @@ def today_kst():
 
 def _backfill_users_from_history(cur):
     """users 테이블 도입 이전부터 있던 방/메시지 기록에서 닉네임을 역으로 채워 넣는다.
-    (로그인 이력을 별도로 남기지 않았던 시절의 계정도 '전체 사용자' 목록에서 누락되지 않도록)"""
+    (로그인 이력을 별도로 남기지 않았던 시절의 계정도 '전체 사용자' 목록에서 누락되지 않도록)
+    users 테이블에 이미 한 명이라도 있으면 이 마이그레이션은 건너뛴다 — 그렇지 않으면
+    관리자가 사용자 계정을 삭제해도, 그 사람이 보낸 메시지가 남아있는 한 서버가 재시작될
+    때마다(배포, 디버그 reloader 등) 대화 이력에서 삭제된 계정이 다시 채워져 버린다."""
+    cur.execute("SELECT 1 FROM users LIMIT 1")
+    if cur.fetchone():
+        return
     cur.execute(
         """
         INSERT OR IGNORE INTO users (nickname, first_login_at, last_login_at)
