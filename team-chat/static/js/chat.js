@@ -84,10 +84,18 @@
     }
   }
 
-  socket.on("connect", () => {
+  // notify.js가 이 페이지의 스크립트보다 먼저 소켓을 만들어두므로, DOM/메시지 렌더링에
+  // 걸리는 시간 동안 소켓이 이미 connect돼버릴 수 있다. 그 경우 여기서 등록하는
+  // connect 리스너는 다시 호출되지 않아 join emit이 영영 안 나가고(=이 방의 실시간
+  // 메시지/리액션을 못 받음), 개인 대상 이벤트(배지 등)만 살아있어 원인이 잘 안 보인다.
+  // 이미 연결돼 있으면 즉시 join하고, 이후 재연결(네트워크 끊김 등)에 대비해
+  // connect 리스너도 계속 유지한다.
+  function joinCurrentRoom() {
     socket.emit("join", { room_id: Number(roomId) });
     markReadIfVisible();
-  });
+  }
+  socket.on("connect", joinCurrentRoom);
+  if (socket.connected) joinCurrentRoom();
 
   document.addEventListener("visibilitychange", markReadIfVisible);
   markReadIfVisible();
