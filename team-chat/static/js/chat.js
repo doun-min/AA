@@ -594,7 +594,10 @@
       return;
     }
     const q = ctx.query.toLowerCase();
-    const matches = mentionCandidates.filter((n) => n.toLowerCase().startsWith(q)).slice(0, 8);
+    // 드롭다운은 CSS에서 이미 스크롤 가능하게(max-height + overflow-y) 만들어져 있으므로
+    // 여기서 앞쪽 N명만 자르면 안 된다 — 방 멤버가 많을 때(특히 전체 인원이 자동 등록되는
+    // "전체" 방) 뒤쪽 멤버가 검색해도 아예 뜨지 않는 채로 통째로 누락돼 버린다.
+    const matches = mentionCandidates.filter((n) => n.toLowerCase().startsWith(q));
     if (!matches.length) {
       closeMentionSuggest();
       return;
