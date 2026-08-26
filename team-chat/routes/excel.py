@@ -3,9 +3,18 @@ import io
 import pandas as pd
 from flask import Blueprint, abort, jsonify, request, send_file, session
 
+import config
+
 excel_bp = Blueprint("excel_api", __name__, url_prefix="/api/excel")
 
 CSV_ENCODINGS = ("utf-8-sig", "utf-8", "cp949")
+
+
+@excel_bp.before_request
+def _raise_upload_limit():
+    # 앱 전역 MAX_CONTENT_LENGTH(config.MAX_CONTENT_LENGTH)는 채팅 첨부파일 등에도
+    # 적용되는 값이라 낮게 유지하고, 엑셀 변환만 더 큰 파일을 받도록 요청 단위로 올린다.
+    request.max_content_length = config.MAX_EXCEL_UPLOAD_LENGTH
 
 
 def _require_login():

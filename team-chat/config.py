@@ -9,6 +9,10 @@ DB_PATH = os.path.join(BASE_DIR, "chat.db")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
 
+# 엑셀 변환(routes/excel.py)은 대용량 CSV/엑셀 파일을 다뤄야 해서 위 전역 제한과
+# 별도로 더 큰 한도를 둔다. (routes/excel.py의 before_request에서 request.max_content_length로 적용)
+MAX_EXCEL_UPLOAD_LENGTH = 500 * 1024 * 1024  # 500MB
+
 # 관리자가 기간을 지정해 로그를 삭제할 때, 삭제 전 내용을 방별로 계속 이어서(append)
 # 백업해두는 txt 파일 위치. 삭제 이력 전체가 시간순으로 한 파일에 쌓인다.
 LOG_BACKUP_FOLDER = os.path.join(BASE_DIR, "log_backups")
@@ -17,6 +21,7 @@ ALLOWED_EXTENSIONS = {
     "png", "jpg", "jpeg", "gif", "webp", "bmp",
     "pdf", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
     "zip", "csv", "hwp", "log",
+    "xml", "json", "yaml", "yml", "ini", "config", "sql",
 }
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
 
