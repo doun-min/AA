@@ -66,7 +66,7 @@ def extract_card(card):
 def main():
     results = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(2000)
