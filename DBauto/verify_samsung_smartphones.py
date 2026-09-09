@@ -2,6 +2,8 @@ import json
 import os
 import re
 import sys
+import time
+from urllib.parse import unquote
 
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
@@ -9,9 +11,23 @@ from playwright.sync_api import sync_playwright
 SITE_ROOT = "https://www.samsung.com"
 BASE_URL = SITE_ROOT + "/us/"
 CARD_SELECTOR = ".js-pfv2-product-card.pd21-product-card__item--active"
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/128.0.0.0 Safari/537.36"
+)
 
-# 스캔할 상단(L0) 메뉴. 이 메뉴의 하위(L1) 제품 카테고리를 모두 순회한다.
+# 스캔할 상단(L0) 메뉴.
+#   CATEGORY_MENU : 단일 메뉴 스캔(하위호환)용 기본 메뉴 이름
+#   MENUS         : None 이면 GNB 의 모든 L0 메뉴, 리스트면 그 메뉴들만
 CATEGORY_MENU = os.environ.get("SAMSUNG_MENU", "Mobile")
+MENUS = (
+    [m.strip() for m in os.environ["SAMSUNG_MENUS"].split(",") if m.strip()]
+    if os.environ.get("SAMSUNG_MENUS")
+    else None
+)
+# PF 단위 재개(resume)용 체크포인트 폴더. 지정 시 PF별 결과 JSON 을 저장/재사용.
+RESUME_DIR = os.environ.get("SAMSUNG_RESUME_DIR") or None
 
 # Recommended 로 한 번, Newest 로 한 번 전체 수집한다.
 SORT_SEQUENCE = ["Recommended", "Newest"]
@@ -20,13 +36,71 @@ SORT_SEQUENCE = ["Recommended", "Newest"]
 MAX_CARDS = int(os.environ.get("SAMSUNG_MAX_CARDS", "0")) or None
 # 카드당 색상 x 용량 조합 수 상한 (테스트용). 0/미설정이면 전체 조합.
 MAX_COMBOS = int(os.environ.get("SAMSUNG_MAX_COMBOS", "0")) or None
+# 카드의 기본 선택(대표) 조합 1개만 수집 (대표모델만 검증할 때 대폭 빨라짐).
+DEFAULT_ONLY = bool(int(os.environ.get("SAMSUNG_DEFAULT_ONLY", "0") or "0"))
 
 # 특정 카테고리만 돌리고 싶을 때: SAMSUNG_CATEGORIES="Galaxy Watch,Galaxy Tab"
 ONLY_CATEGORIES = [
     c.strip() for c in os.environ.get("SAMSUNG_CATEGORIES", "").split(",") if c.strip()
 ]
 
+# 카드/조합 수를 제한하는 옵션이 하나라도 켜져 있으면 개수 검증은 참고용(부분 스캔).
+PARTIAL_SCAN = bool(MAX_CARDS or MAX_COMBOS or DEFAULT_ONLY)
+
+# PF(= canonical path) 별 "고정 기대 SKU 수". 데이터 추출 시점 기준 고정치이며,
+# 여기 없는 PF 는 개수 검증을 건너뛴다. SAMSUNG_EXPECTED_COUNTS 로 JSON 병합 가능.
+#   예: {"/us/watches/all-watches": 30, "/us/smartphones/all-smartphones": 55}
+EXPECTED_COUNTS = {
+}
+try:
+    EXPECTED_COUNTS.update(
+        json.loads(os.environ.get("SAMSUNG_EXPECTED_COUNTS", "") or "{}")
+    )
+except Exception:  # noqa: BLE001
+    pass
+# Newest 정렬은 추출 시점 이후 신제품이 나올 수 있어 +N 까지 pass 로 허용(기본 +1).
+NEWEST_COUNT_TOLERANCE = int(os.environ.get("SAMSUNG_NEWEST_TOLERANCE", "1") or "1")
+
 SKU_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/]{4,}$")
+
+# 검증 시 완전일치가 아니라 ±10% 이내면 pass 로 처리할 필드
+# (데이터 추출 시점과 검증 시점의 시간차로 값이 변동하기 때문)
+TOLERANCE_FIELDS = {"review_count", "review_rating_score"}
+TOLERANCE_RATIO = 0.10
+
+# 완전일치(pass/fail) 로 검증 가능한, PF 페이지에서 직접 읽히는 필드
+EXACT_MATCH_FIELDS = [
+    "model_code",
+    "sku",
+    "model_name",
+    "display_name",
+    "display_category_major",
+    "display_category_middle",
+    "product_color",
+    "capacity",
+    "product_url",
+    "cta_pd_url",
+    "image_url",
+    "family_id",
+    "badge",
+    "standard_price",
+    "final_price",
+    "currency",
+    "on_sale",
+    "stock_level_status",
+    "sort_type",
+    "sorting_no",
+    "is_default",
+]
+
+_CUR_SYMBOL = {"$": "USD", "US$": "USD", "USD": "USD"}
+
+
+def _to_number(text):
+    if text is None:
+        return None
+    m = re.search(r"[\d,]+\.?\d*", str(text))
+    return float(m.group(0).replace(",", "")) if m else None
 
 
 def parse_price_save(text: str):
@@ -37,6 +111,25 @@ def parse_price_save(text: str):
         return {"currency": None, "price": None}
     currency, price = m.group(1).strip(), m.group(2).replace(",", "")
     return {"currency": currency, "price": float(price)}
+
+
+def parse_price_current(text: str):
+    """'From $1,799.99 or $75.00/mo for 24mo' 같은 현재가 문자열 파싱."""
+    if not text:
+        return {}
+    out = {}
+    cur = re.search(r"(US\$|USD|\$|€|£|₩)", text)
+    if cur:
+        out["currency"] = _CUR_SYMBOL.get(cur.group(1), cur.group(1))
+    # 첫 번째 금액 = 현재가(최종가)
+    amt = re.search(r"(?:US\$|USD|\$|€|£|₩)\s*([\d,]+\.?\d*)", text)
+    if amt:
+        out["final_price"] = float(amt.group(1).replace(",", ""))
+    mo = re.search(r"([\d,]+\.?\d*)\s*/\s*mo(?:nth)?\s*for\s*(\d+)\s*mo", text, re.I)
+    if mo:
+        out["monthly_price"] = float(mo.group(1).replace(",", ""))
+        out["monthly_months"] = int(mo.group(2))
+    return out
 
 
 def first_or_none(scope, selector):
@@ -134,15 +227,68 @@ def set_sort(page, sort_name: str):
 # --------------------------------------------------------------------------- #
 # 카드 단위 추출
 # --------------------------------------------------------------------------- #
+def _feedback_params(card):
+    """카드 링크의 data-feedback-param 을 dict 로 파싱 (pn/pi/dc/sc/dg/sb/pr/cg ...).
+
+    주의: 이 속성은 엄격한 form-urlencoded 가 아니다. 공백과 '+' 를 문자 그대로
+    쓰기 때문에 parse_qs(내부적으로 unquote_plus) 를 쓰면 'OptiDry+' 의 '+' 가
+    공백으로 뭉개진다. '&'/'=' 로만 쪼개고 %XX 만 unquote 한다.
+    """
+    el = first_or_none(
+        card, "a.pd21-product-card__image-cta, a.pd21-product-card__name"
+    )
+    raw = el.get_attribute("data-feedback-param") if el else None
+    if not raw:
+        return {}
+    out = {}
+    for part in raw.split("&"):
+        if not part:
+            continue
+        k, _sep, v = part.partition("=")
+        out.setdefault(unquote(k), unquote(v))  # 첫 값 유지
+    return out
+
+
+def _drop_frag(href):
+    """URL 에서 #fragment, ?query 제거."""
+    return href.split("#", 1)[0].split("?", 1)[0] if href else href
+
+
+def _strip_buy_url(href):
+    """구매 링크 정규화.
+    스마트폰:  .../buy/<variant-slug>  -> .../buy/
+    그 외(가전 등): /buy/ 세그먼트가 없으므로 PDP 경로를 그대로 사용.
+    """
+    href = _drop_frag(href)
+    if not href:
+        return None
+    m = re.match(r"(.*/buy/)", href)
+    return m.group(1) if m else href
+
+
+def _promo_url(href):
+    """구매/버라이언트 경로를 잘라 홍보용(promo) URL 로 정규화. .../galaxy-s26-fe/buy/... -> .../galaxy-s26-fe/"""
+    href = _drop_frag(href)
+    if not href:
+        return None
+    href = re.sub(r"/buy(/.*)?$", "/", href)
+    if not href.endswith("/"):
+        href += "/"
+    return href
+
+
 def extract_card_base(card):
     """색상/용량과 무관한 카드 공통 정보."""
     product_id = card.get_attribute("data-productidx")
-    if product_id is None:
-        cb = first_or_none(card, "input.pd21-product-card__compare-checkbox")
-        product_id = cb.get_attribute("data-productidx") if cb else None
+    cb = first_or_none(card, "input.pd21-product-card__compare-checkbox")
+    if product_id is None and cb:
+        product_id = cb.get_attribute("data-productidx")
 
+    # 파란 "New" 배지뿐 아니라 프로모션 배지("Labor Day", "BUY MORE, SAVE MORE" 등)도 읽는다
     badge_el = first_or_none(
-        card, "span.badge-icon.badge-icon--label-v2.badge-icon--bg-color-blue"
+        card,
+        "div.pd21-product-card__badge span.badge-icon, "
+        "span.badge-icon.badge-icon--label-v2",
     )
     badge_text = badge_el.inner_text().strip() if badge_el else None
 
@@ -152,16 +298,172 @@ def extract_card_base(card):
         if img_el
         else None
     )
+    rep_image_url = cb.get_attribute("data-img-src") if cb else None
 
     name_el = first_or_none(card, "div.pd21-product-card__name-wrap")
     name_text = name_el.inner_text().strip() if name_el else None
 
+    link_el = first_or_none(
+        card, "a.pd21-product-card__image-cta, a.pd21-product-card__name"
+    )
+    model_name = link_el.get_attribute("data-modelname") if link_el else None
+
+    learn_el = first_or_none(
+        card, "div.pd21-product-card__cta a.cta__link:not([href*='/buy'])"
+    )
+    product_url = _promo_url(
+        (learn_el.get_attribute("href") if learn_el else None)
+        or (link_el.get_attribute("href") if link_el else None)
+    )
+
+    # 구매 링크: 스마트폰은 href 에 '/buy' 가 있지만 가전은 곧바로 PDP 로 간다.
+    # 링크 안의 Buy 버튼(an-ac="Buy")으로 식별한다.
+    buy_el = first_or_none(
+        card,
+        "div.pd21-product-card__cta a.cta__link:has(button[an-ac='Buy']), "
+        "div.pd21-product-card__cta a.cta__link[href*='/buy']",
+    )
+    buy_url = buy_el.get_attribute("href") if buy_el else None
+
+    family_id = None
+    is_multi_group = False
+    group_id = cb.get_attribute("data-group-id") if cb else None
+    if group_id:
+        is_multi_group = "MULTI_GROUP" in group_id.upper()
+        # 'FMY_ID_600251' -> '600251', 'MULTI_GROUP_ID_601773' -> '601773'
+        m = re.search(r"(\d+)\s*$", group_id)
+        family_id = m.group(1) if m else (group_id.strip() or None)
+
+    # 평점 / 리뷰 수 (±10% 허용 대상)
+    rp = first_or_none(card, "strong.rating__point span:last-child")
+    review_rating_score = _to_number(rp.inner_text()) if rp else None
+    rc = first_or_none(card, "em.rating__review-count span:last-child")
+    review_count = int(_to_number(rc.inner_text())) if rc and _to_number(rc.inner_text()) is not None else None
+
+    fp = _feedback_params(card)
+
     return {
         "product_id": product_id,
+        "model_name": model_name,
+        "name": name_text,
+        "display_name": fp.get("pn") or name_text,
+        "display_category_major": fp.get("dc"),
+        "display_category_middle": fp.get("sc"),
+        "sub_family": fp.get("dg"),
+        "category_code": fp.get("cg"),
         "badge": badge_text,
         "image_url": image_url,
-        "name": name_text,
+        "rep_image_url": rep_image_url,
+        "product_url": product_url,
+        "cta_pd_url": _strip_buy_url(buy_url),
+        "buy_url": buy_url,
+        "family_id": family_id,
+        "is_multi_group": is_multi_group,
+        "review_count": review_count,
+        "review_rating_score": review_rating_score,
+        "feedback_model_code": fp.get("pi"),
+        "feedback_rank": int(fp["pr"]) if str(fp.get("pr", "")).isdigit() else None,
     }
+
+
+def _checked_chip_value(card, wrap_class):
+    """카드가 기본 선택(is-checked)한 칩 값."""
+    wrap = card.locator(f"div.{wrap_class}")
+    if wrap.count() == 0:
+        return None
+    slide = wrap.locator("div.option-selector-v2__swiper-slide.is-checked").first
+    if slide.count() == 0:
+        return None
+    v = slide.get_attribute("data-chip-value")
+    if not v:
+        t = slide.locator("span.option-selector-v2__size-text")
+        v = t.inner_text().strip() if t.count() else slide.get_attribute("data-chip-code")
+    return v
+
+
+_SAVE_RE = re.compile(r"(?:save|[-−])\s*(?:US\$|USD|\$|€|£|₩)?\s*([\d,]+\.?\d*)", re.I)
+
+
+def _max_save(card):
+    """카드에 표기된 모든 'Save $X' 중 최댓값(최대 할인액). 없으면 None."""
+    hi = card.locator("div.price-ux__wrap span.price-ux__price-save-highlight")
+    saves = []
+    for i in range(hi.count()):
+        m = _SAVE_RE.search(hi.nth(i).inner_text() or "")
+        if m:
+            saves.append(float(m.group(1).replace(",", "")))
+        else:  # 'Save' 키워드 없이 금액만 있는 변형 대비
+            v = _to_number(hi.nth(i).inner_text())
+            if v is not None:
+                saves.append(v)
+    return max(saves) if saves else None
+
+
+def read_prices(card):
+    """standard_price / final_price / currency / on_sale / 할인액 / 월 납부.
+
+    final_price(최종 = 할인가) 규칙:
+      - 카드에 'Save $X'(price-save) 표기가 있으면
+            final_price = standard_price - max(Save $X)   ← 최대 할인 적용
+      - 표기가 없으면 final_price = standard_price (= 현재가)
+    """
+    out = {
+        "standard_price": None,
+        "final_price": None,
+        "currency": None,
+        "on_sale": False,
+        "discount_amount": None,
+        "monthly_price": None,
+        "monthly_months": None,
+    }
+    was = first_or_none(
+        card,
+        "div.price-ux__wrap p.price-ux__price-save span.price-ux__price-save-was",
+    )
+    cur = first_or_none(card, "div.price-ux__wrap .price-ux__price-current")
+
+    cur_info = parse_price_current(cur.inner_text()) if cur else {}
+    current_price = cur_info.get("final_price")  # 현재가 문자열의 첫 금액
+    out["currency"] = cur_info.get("currency")
+    out["monthly_price"] = cur_info.get("monthly_price")
+    out["monthly_months"] = cur_info.get("monthly_months")
+
+    if was:
+        ps = parse_price_save(was.inner_text().strip())
+        out["standard_price"] = ps.get("price") if ps else None
+        if out["currency"] is None and ps and ps.get("currency"):
+            out["currency"] = _CUR_SYMBOL.get(ps["currency"], ps["currency"])
+
+    save = _max_save(card)
+    if save is not None:
+        out["on_sale"] = True
+        out["discount_amount"] = save
+
+    # 기준가가 없으면 현재가를 기준가로 사용
+    if out["standard_price"] is None:
+        out["standard_price"] = current_price
+
+    # 최종가 = 할인 표기가 있으면 기준가 - 최대할인액, 없으면 기준가
+    if out["standard_price"] is not None and save is not None:
+        out["final_price"] = round(out["standard_price"] - save, 2)
+    elif out["standard_price"] is not None:
+        out["final_price"] = out["standard_price"]
+    else:
+        out["final_price"] = current_price
+    return out
+
+
+def read_stock_status(card):
+    """카드 CTA 로 재고 상태 추정: inStock / outOfStock / notifyMe / comingSoon / unknown."""
+    cta = card.locator("div.pd21-product-card__cta-wrap")
+    txt = (cta.inner_text().lower() if cta.count() else "")
+    if "sold out" in txt or "out of stock" in txt:
+        return "outOfStock"
+    if "notify me" in txt or "coming soon" in txt or "pre-order" in txt or "preorder" in txt:
+        return "notifyMe" if "notify" in txt else "comingSoon"
+    if "buy" in txt or "add to cart" in txt:
+        return "inStock"
+    return "unknown"
 
 
 def read_price_save(card):
@@ -288,9 +590,145 @@ def read_quick_view_sku(page, card):
     return sku
 
 
-def extract_card_variants(page, card, base, sort_type):
-    """카드의 모든 색상 x 용량(또는 사이즈) 조합을 순회하며 SKU 를 수집."""
+# --------------------------------------------------------------------------- #
+# DOM 기반 variant SKU (Quick View 를 열지 않음)
+#
+# 칩을 선택하면 카드 DOM 이 해당 variant 코드로 갱신된다. 서로 독립적인 소스
+# (compare-checkbox data-model-code / id, image-cta data-feedback-param 의 pi=)
+# 가 항상 일치하며, 표본 검증에서 Quick View SKU 와 100% 동일했다.
+# --------------------------------------------------------------------------- #
+# 첫 N개 variant 는 Quick View 로 교차검증 (SAMSUNG_QV_AUDIT_N, PF 마다 리셋)
+QV_AUDIT_N = int(os.environ.get("SAMSUNG_QV_AUDIT_N", "0") or "0")
+_QV_AUDIT_LEFT = 0
+
+
+def _consume_qv_audit():
+    global _QV_AUDIT_LEFT
+    if _QV_AUDIT_LEFT > 0:
+        _QV_AUDIT_LEFT -= 1
+        return True
+    return False
+
+
+def _card_codes(card):
+    """카드 DOM 의 현재 variant 코드 후보 리스트 (대문자, 형식검증 통과분만)."""
+    raw = []
+    cb = first_or_none(card, "input.pd21-product-card__compare-checkbox")
+    if cb:
+        raw += [
+            cb.get_attribute("data-model-code"),
+            cb.get_attribute("data-modelcode"),
+            cb.get_attribute("id"),
+        ]
+    link = first_or_none(
+        card, "a.pd21-product-card__image-cta, a.pd21-product-card__name"
+    )
+    if link:
+        raw.append(link.get_attribute("data-modelcode"))
+        fp = link.get_attribute("data-feedback-param") or ""
+        m = re.search(r"(?:^|&)pi=([^&]+)", fp)
+        if m:
+            raw.append(m.group(1))
+    out = []
+    for c in raw:
+        if c and SKU_RE.match(c.strip()):
+            out.append(c.strip().upper())
+    return out
+
+
+def read_variant_sku(page, card, prev_code=None):
+    """칩 선택 후 카드 DOM 에서 variant SKU 를 읽는다 (Quick View 안 엶).
+
+    반환: (sku, source, mismatch)
+      source   : 'dom' | 'dom-stable' | 'dom-nochange' | 'quickview' | None
+      mismatch : Quick View 교차검증 시 불일치면 {'dom':.., 'qv':..}, 아니면 None
+    """
+    prev = (prev_code or "").upper() or None
+    chosen, source = None, None
+    for i in range(15):  # 최대 ~3s
+        codes = _card_codes(card)
+        if codes:
+            cur = max(set(codes), key=codes.count)
+            agree = codes.count(cur)
+            if agree >= 2 and (prev is None or cur != prev):
+                chosen, source = cur, "dom"
+                break
+            if agree >= 3 and i >= 4:  # 값이 안 바뀐 조합(기본 등) — 안정 후 수용
+                chosen, source = cur, "dom-stable"
+                break
+        page.wait_for_timeout(200)
+    if chosen is None:
+        codes = _card_codes(card)
+        if codes:
+            chosen, source = max(set(codes), key=codes.count), "dom-nochange"
+
+    mismatch = None
+    audit = _consume_qv_audit()
+    if chosen is None or audit:
+        qv = None
+        try:
+            qv = read_quick_view_sku(page, card)
+        except Exception:  # noqa: BLE001
+            _close_quick_view(page)
+        if chosen is None:
+            chosen, source = qv, "quickview"
+        elif qv and qv.upper() != chosen:
+            mismatch = {"dom": chosen, "qv": qv}
+    return chosen, source, mismatch
+
+
+def _variant_record(
+    page, card, base, sort_type, sorting_no, color_name, capacity, is_default,
+    prev_code=None,
+):
+    prices = read_prices(card)
+    rec = dict(base)
+    modelcode = read_card_modelcode(card)
+    rec.update(
+        {
+            "sort_type": sort_type,
+            "sorting_no": sorting_no,
+            "product_color": color_name,
+            "color_name": color_name,  # 하위호환
+            "capacity": capacity,
+            "is_default": is_default,
+            "modelcode": modelcode,
+            "model_code": modelcode,
+            "stock_level_status": read_stock_status(card),
+            "price_save": read_price_save(card),  # 하위호환
+            "sku": None,
+        }
+    )
+    rec.update(prices)
+    try:
+        sku, src, mism = read_variant_sku(page, card, prev_code)
+        rec["sku"] = sku
+        rec["sku_source"] = src
+        if mism:
+            rec["sku_audit_mismatch"] = mism
+    except Exception as e:  # noqa: BLE001 - 조합 하나 실패해도 계속 진행
+        rec["error"] = f"{type(e).__name__}: {e}"
+        _close_quick_view(page)
+    return rec
+
+
+def extract_card_variants(page, card, base, sort_type, sorting_no):
+    """카드의 모든 색상 x 용량(또는 사이즈) 조합을 순회하며 SKU + 검증 필드를 수집."""
     records = []
+    default_color = _checked_chip_value(card, "option-selector-v2__wrap--color-chip")
+    default_capacity = _checked_chip_value(card, "option-selector-v2__wrap--capacity")
+
+    dc = _card_codes(card)
+    prev_code = max(set(dc), key=dc.count) if dc else None  # 카드 현재(기본) 코드
+
+    if DEFAULT_ONLY:
+        return [
+            _variant_record(
+                page, card, base, sort_type, sorting_no,
+                default_color, default_capacity, True, prev_code=None,
+            )
+        ]
+
     colors = _chip_options(
         card, "option-selector-v2__wrap--color-chip", "option-selector-v2__color"
     )
@@ -314,28 +752,18 @@ def extract_card_variants(page, card, base, sort_type):
             if cap_btn is not None:
                 _click_chip(page, cap_btn)
 
-            rec = dict(base)
-            rec.update(
-                {
-                    "sort_type": sort_type,
-                    "color_name": color_name,
-                    "capacity": capacity,
-                    "price_save": read_price_save(card),
-                    "modelcode": read_card_modelcode(card),
-                    "sku": None,
-                }
+            rec = _variant_record(
+                page, card, base, sort_type, sorting_no, color_name, capacity,
+                color_name == default_color and capacity == default_capacity,
+                prev_code=prev_code,
             )
-            try:
-                rec["sku"] = read_quick_view_sku(page, card)
-            except Exception as e:  # noqa: BLE001 - 조합 하나 실패해도 계속 진행
-                rec["error"] = f"{type(e).__name__}: {e}"
-                _close_quick_view(page)
-
+            if rec.get("sku"):
+                prev_code = rec["sku"]
             records.append(rec)
     return records
 
 
-def extract_all(page, sort_type):
+def extract_all(page, sort_type, progress=None):
     """현재 정렬 상태에서 활성 카드 전체를 순회."""
     page.wait_for_selector(CARD_SELECTOR, timeout=30000)
     page.wait_for_timeout(1200)
@@ -344,6 +772,8 @@ def extract_all(page, sort_type):
     total = cards.count()
     if MAX_CARDS:
         total = min(total, MAX_CARDS)
+    if progress:
+        progress.set_cards(total)
 
     results = []
     for i in range(total):
@@ -355,7 +785,7 @@ def extract_all(page, sort_type):
         try:
             base = extract_card_base(card)
             results.extend(
-                extract_card_variants(page, card, base, sort_type)
+                extract_card_variants(page, card, base, sort_type, i + 1)
             )
         except Exception as e:  # noqa: BLE001 - 카드 하나 실패해도 다음 카드 진행
             results.append(
@@ -366,6 +796,8 @@ def extract_all(page, sort_type):
                 }
             )
             _close_quick_view(page)
+        if progress:
+            progress.card(i + 1, sort_type, len(results))
     return results
 
 
@@ -397,7 +829,7 @@ _DISCOVER_JS = r"""
 
 
 def discover_categories(page):
-    """CATEGORY_MENU 플라이아웃을 열어 [{name, href}, ...] 를 반환."""
+    """CATEGORY_MENU 플라이아웃을 열어 [{name, href}, ...] 를 반환 (단일 메뉴, 하위호환)."""
     try:
         page.locator(
             "a.nv00-gnb-v4__l0-menu-link", has_text=CATEGORY_MENU
@@ -411,26 +843,164 @@ def discover_categories(page):
     return cats
 
 
+_DISCOVER_ALL_JS = r"""
+() => {
+    const l0s = [...document.querySelectorAll('a.nv00-gnb-v4__l0-menu-link')];
+    const out = [];
+    for (const l0 of l0s) {
+        const l0name = l0.textContent.trim().replace(/\s+/g, ' ');
+        let node = l0;
+        while (node && node.parentElement) {
+            node = node.parentElement;
+            if (node.querySelector && node.querySelector('a.nv00-gnb-v4__l1-menu-link')) break;
+        }
+        if (!node) continue;
+        const seen = new Set();
+        for (const a of node.querySelectorAll('a.nv00-gnb-v4__l1-menu-link')) {
+            const text = a.textContent.trim().replace(/\s+/g, ' ').replace(/\s*NEW$/i, '').trim();
+            const href = a.getAttribute('href');
+            if (!href || seen.has(href)) continue;
+            seen.add(href);
+            out.push({ l0: l0name, l1: text || '(unnamed)', href: href });
+        }
+    }
+    return out;
+}
+"""
+
+
+def _canon_url(href):
+    """호스트/쿼리/프래그먼트/끝슬래시 제거 + 소문자 -> PF 식별용 canonical path."""
+    if not href:
+        return None
+    href = href.split("#")[0].split("?")[0]
+    m = re.search(r"https?://[^/]+(/.*)$", href)
+    path = m.group(1) if m else href
+    if href.startswith("http") and not m:  # 도메인만 있고 path 없음
+        return None
+    return "/" + path.strip("/").lower()
+
+
+def _looks_like_pf(canon):
+    """PF(제품 파인더) 페이지일 법한 URL 만 통과. 개별 상품/구매플로우/외부/너무 깊은 경로 제외."""
+    if not canon or "-sku-" in canon:
+        return False
+    segs = [s for s in canon.strip("/").split("/") if s]
+    if not segs or segs[0] != "us" or not (2 <= len(segs) <= 4):
+        return False
+    if segs[-1] in ("buy", "buy-now"):  # 구매 플로우 페이지
+        return False
+    if len(segs) >= 3 and segs[-1] == segs[-2]:  # /us/xr/galaxy-xr/galaxy-xr = 단일 상품
+        return False
+    return True
+
+
+def discover_all_categories(page):
+    """GNB 의 모든 L0 메뉴에서 L1 링크를 모아 canonical URL 로 dedup.
+
+    반환: [{name, href, canon, sources:[{l0,l1}, ...]}]  (sources = 이 PF 로 이어진 모든 메뉴 경로)
+    """
+    raw = page.evaluate(_DISCOVER_ALL_JS)
+    groups = {}
+    for r in raw:
+        if MENUS and r["l0"] not in MENUS:
+            continue
+        canon = _canon_url(r["href"])
+        if not _looks_like_pf(canon):
+            continue
+        g = groups.setdefault(
+            canon, {"name": r["l1"], "href": r["href"], "canon": canon, "sources": []}
+        )
+        src = {"l0": r["l0"], "l1": r["l1"]}
+        if src not in g["sources"]:
+            g["sources"].append(src)
+    cats = list(groups.values())
+    if ONLY_CATEGORIES:
+        cats = [
+            c
+            for c in cats
+            if c["name"] in ONLY_CATEGORIES
+            or any(s["l1"] in ONLY_CATEGORIES for s in c["sources"])
+        ]
+    return cats
+
+
+class Progress:
+    """PF/카드 단위 진행 상황 로거. 터미널이면 \\r 갱신, 리다이렉트면 줄단위."""
+
+    def __init__(self, total_pf, stream=None):
+        self.total = total_pf
+        self.done = 0
+        self.stream = stream or sys.stderr
+        self.tty = bool(getattr(self.stream, "isatty", lambda: False)())
+        self.t0 = time.time()
+        self.pf_times = []
+        self.cur = {}
+
+    def _clock(self):
+        return time.strftime("%H:%M:%S")
+
+    def _eta(self):
+        if not self.pf_times:
+            return ""
+        avg = sum(self.pf_times) / len(self.pf_times)
+        rem = (self.total - self.done) * avg
+        return f"avg {avg / 60:.1f}m/PF ETA ~{rem / 60:.0f}m"
+
+    def _emit(self, msg, transient=False):
+        if self.tty:
+            self.stream.write("\r\033[K" + msg + ("" if transient else "\n"))
+        elif not transient:
+            self.stream.write(msg + "\n")
+        self.stream.flush()
+
+    def start_pf(self, idx, cat):
+        self.cur = {"idx": idx, "name": cat["canon"], "t": time.time(), "cards": 0}
+        src = "; ".join(f'{s["l0"]}>{s["l1"]}' for s in cat.get("sources", []))
+        self._emit(f"[{self._clock()}] PF {idx}/{self.total}  {cat['canon']}  (from: {src})")
+
+    def set_cards(self, n):
+        self.cur["cards"] = n
+
+    def card(self, i, sort, recs):
+        c = self.cur.get("cards", 0)
+        msg = (
+            f"    PF {self.cur.get('idx')}/{self.total}  card {i}/{c}  "
+            f"sort={sort}  recs={recs}  {self._eta()}"
+        )
+        self._emit(msg, transient=self.tty and not (i == c))
+
+    def end_pf(self, status, nrecs):
+        dt = time.time() - self.cur.get("t", time.time())
+        self.pf_times.append(dt)
+        self.done += 1
+        self._emit(
+            f"[{self._clock()}] done PF {self.cur.get('idx')}/{self.total}  "
+            f"{self.cur.get('name')}  {status}  {nrecs} recs  {dt / 60:.1f}m  {self._eta()}"
+        )
+
+    def snapshot(self, n_records):
+        return {
+            "updated": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "pf_total": self.total,
+            "pf_done": self.done,
+            "current_pf": self.cur.get("name"),
+            "elapsed_min": round((time.time() - self.t0) / 60, 1),
+            "eta": self._eta(),
+            "records_so_far": n_records,
+        }
+
+
+def _ckpt_path(cat):
+    slug = re.sub(r"[^a-z0-9]+", "_", cat["canon"]).strip("_") or "root"
+    return os.path.join(RESUME_DIR, f"{slug}.json")
+
+
 def navigate_to_category(page, cat):
-    """Mobile 메뉴에 다시 hover 해서 해당 카테고리 링크를 클릭. 실패하면 URL 직접 이동."""
-    href = cat["href"]
-    clicked = False
-    try:
-        page.locator(
-            "a.nv00-gnb-v4__l0-menu-link", has_text=CATEGORY_MENU
-        ).first.hover()
-        page.wait_for_timeout(900)
-        link = page.locator(
-            f".nv00-gnb-v4__l0-menu--show a.nv00-gnb-v4__l1-menu-link[href='{href}']"
-        ).first
-        if link.count():
-            link.click(timeout=8000)
-            clicked = True
-    except Exception:  # noqa: BLE001
-        clicked = False
-    if not clicked:
-        url = href if href.startswith("http") else SITE_ROOT + href
-        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    """해당 PF URL 로 직접 이동 (여러 L0 메뉴에 걸친 PF 를 순회하므로 goto 가 안정적)."""
+    href = cat.get("href") or cat.get("canon") or ""
+    url = href if href.startswith("http") else SITE_ROOT + href
+    page.goto(url, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(2500)
     dismiss_consent(page)
 
@@ -475,14 +1045,20 @@ def wait_for_pf(page, timeout_ms=15000):
 # --------------------------------------------------------------------------- #
 # 진입점
 # --------------------------------------------------------------------------- #
-def scan_category(page, cat):
-    """한 카테고리에서 두 정렬 모두 전체 추출. 그리드가 없으면 skip 마커 1건 반환."""
+def scan_category(page, cat, progress=None):
+    """한 PF 에서 두 정렬 모두 전체 추출. 그리드가 없으면 skip 마커 1건 반환."""
+    global _QV_AUDIT_LEFT
+    _QV_AUDIT_LEFT = QV_AUDIT_N  # PF 마다 Quick View 교차검증 카운터 리셋
     navigate_to_category(page, cat)
+    canon = cat.get("canon") or _canon_url(cat.get("href"))
+    src_menus = [f'{s["l0"]}>{s["l1"]}' for s in cat.get("sources", [])]
     if not wait_for_pf(page):
         return [
             {
                 "category": cat["name"],
-                "category_url": cat["href"],
+                "category_url": cat.get("href"),
+                "source_pf_url": canon,
+                "source_menus": src_menus,
                 "status": "skipped: no product-finder grid",
             }
         ]
@@ -495,61 +1071,231 @@ def scan_category(page, cat):
         except PWTimeout:
             applied = sort_name
         sort_type = (applied or sort_name).strip()
-        # 이 카테고리에 해당 정렬이 없어 이전 패스와 같은 결과가 되면 건너뛴다.
-        if sort_type.lower() in done_sorts:
-            print(
-                f"[info]   '{sort_name}' unavailable here -> skip duplicate pass",
-                file=sys.stderr,
-            )
+        if sort_type.lower() in done_sorts:  # 이 PF 에 해당 정렬이 없음 -> 중복 패스 skip
             continue
         done_sorts.add(sort_type.lower())
-        for rec in extract_all(page, sort_type):
+        for rec in extract_all(page, sort_type, progress=progress):
             rec["category"] = cat["name"]
-            rec["category_url"] = cat["href"]
+            rec["category_url"] = cat.get("href")
+            rec["source_pf_url"] = canon
+            rec["source_menus"] = src_menus
             out.append(rec)
     return out
 
 
-def main():
+def _dedup_compare_keys():
+    return (
+        "model_name", "display_name", "display_category_major",
+        "display_category_middle", "product_color", "capacity", "standard_price",
+        "final_price", "currency", "on_sale", "stock_level_status", "badge",
+        "family_id", "product_url", "cta_pd_url", "image_url", "review_count",
+        "review_rating_score", "is_default",
+    )
+
+
+def dedupe_records(records):
+    """(sku, sort_type) 기준 제품 레벨 dedup.
+
+    값이 같으면 하나로 합치고(also_seen_on 기록), 다르면 유지 + ambiguous 표시.
+    sorting_no 는 PF 마다 다른 게 정상이므로 sorting_no_by_source 로 보존.
+    반환: (deduped_records, ambiguities)
+    """
+    groups, passthrough = {}, []
+    for r in records:
+        if r.get("status") or not r.get("sku"):
+            passthrough.append(r)
+            continue
+        groups.setdefault((r["sku"], r.get("sort_type")), []).append(r)
+
+    out = list(passthrough)
+    ambiguities = []
+    for (sku, sort_type), rs in groups.items():
+        if len(rs) == 1:
+            out.append(rs[0])
+            continue
+        base = dict(rs[0])
+        diffs = {}
+        for r in rs[1:]:
+            for k in _dedup_compare_keys():
+                if r.get(k) != base.get(k):
+                    diffs.setdefault(k, set()).update(
+                        [base.get(k), r.get(k)]
+                    )
+        base["seen_count"] = len(rs)
+        base["also_seen_on"] = sorted({r.get("source_pf_url") for r in rs if r.get("source_pf_url")})
+        base["sorting_no_by_source"] = {
+            r.get("source_pf_url"): r.get("sorting_no") for r in rs
+        }
+        if diffs:
+            base["ambiguous_fields"] = sorted(diffs)
+            ambiguities.append(
+                {
+                    "sku": sku,
+                    "sort_type": sort_type,
+                    "sources": base["also_seen_on"],
+                    "fields": {k: sorted(map(str, v)) for k, v in diffs.items()},
+                }
+            )
+        out.append(base)
+    return out, ambiguities
+
+
+def verify_counts(records):
+    """PF(canonical URL) x sort_type 별 고유 SKU 수를 EXPECTED_COUNTS 와 대조.
+
+      Recommended : actual == expected            -> pass
+      Newest      : expected <= actual
+                    <= expected + NEWEST_COUNT_TOLERANCE  -> pass
+                    (추출 시점 이후 신제품 추가분 허용)
+    부분 스캔(MAX_CARDS 등) 시엔 판정 없이 counts 만 보고한다.
+    """
+    by_pf = {}   # canon -> sort_type -> set(sku)
+    pf_name = {}
+    for r in records:
+        canon = r.get("source_pf_url")
+        if not canon:
+            continue
+        pf_name.setdefault(canon, r.get("category"))
+        if r.get("status") or not r.get("sku"):
+            continue
+        by_pf.setdefault(canon, {}).setdefault(
+            r.get("sort_type"), set()
+        ).add(r["sku"])
+
+    out = []
+    for canon in sorted(by_pf):
+        expected = EXPECTED_COUNTS.get(canon)
+        counts = {st: len(s) for st, s in sorted(by_pf[canon].items())}
+        entry = {
+            "pf_url": canon,
+            "category": pf_name.get(canon),
+            "expected": expected,
+            "counts": counts,
+        }
+        if PARTIAL_SCAN:
+            entry["result"] = "skipped: partial scan"
+        elif expected is None:
+            entry["result"] = "skipped: no expected count"
+        else:
+            checks, overall = {}, "pass"
+            for st, skus in sorted(by_pf[canon].items()):
+                actual = len(skus)
+                if (st or "").lower() == "newest":
+                    lo, hi = expected, expected + NEWEST_COUNT_TOLERANCE
+                    ok = lo <= actual <= hi
+                    checks[st] = {
+                        "actual": actual,
+                        "expected": expected,
+                        "allowed_range": [lo, hi],
+                        "pass": ok,
+                    }
+                else:
+                    ok = actual == expected
+                    checks[st] = {
+                        "actual": actual,
+                        "expected": expected,
+                        "pass": ok,
+                    }
+                overall = overall if ok else "fail"
+            entry["checks"] = checks
+            entry["result"] = overall
+        out.append(entry)
+
+    # 기대치는 있는데 이번 스캔에 안 잡힌 PF 도 실패로 보고
+    for canon, expected in EXPECTED_COUNTS.items():
+        if canon not in by_pf:
+            out.append(
+                {
+                    "pf_url": canon,
+                    "category": None,
+                    "expected": expected,
+                    "counts": {},
+                    "result": "fail: PF not scanned",
+                }
+            )
+    return out
+
+
+def run_scan(progress_file=None):
+    """GNB 의 모든 L0 메뉴(MENUS=None) 또는 지정 메뉴의 PF 페이지를 canonical URL 로
+    dedup 해 순회 스크랩. RESUME_DIR 지정 시 PF 단위 체크포인트 저장/재사용.
+    """
+    log = lambda m: print(m, file=sys.stderr)  # noqa: E731
     results = []
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(
-            viewport={"width": 1440, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/128.0.0.0 Safari/537.36"
-            ),
+            viewport={"width": 1440, "height": 900}, user_agent=USER_AGENT
         )
         page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(2000)
         dismiss_consent(page)
 
-        categories = discover_categories(page)
-        print(
-            f"[info] {CATEGORY_MENU}: {len(categories)} categories -> "
-            + ", ".join(c["name"] for c in categories),
-            file=sys.stderr,
+        cats = discover_all_categories(page)
+        log(
+            f"[info] menus={'ALL' if not MENUS else ','.join(MENUS)}  "
+            f"unique PF pages={len(cats)}  "
+            f"(dup menu-paths collapsed: "
+            f"{sum(len(c['sources']) for c in cats) - len(cats)})"
         )
+        prog = Progress(len(cats))
 
-        for cat in categories:
-            print(f"[info] scanning: {cat['name']} ({cat['href']})", file=sys.stderr)
+        for i, cat in enumerate(cats, 1):
+            ckpt = _ckpt_path(cat) if RESUME_DIR else None
+            if ckpt and os.path.exists(ckpt):
+                try:
+                    recs = json.load(open(ckpt, encoding="utf-8"))
+                    results.extend(recs)
+                    prog.done += 1
+                    log(f"[resume] PF {i}/{len(cats)} {cat['canon']} <- checkpoint ({len(recs)})")
+                    continue
+                except Exception:  # noqa: BLE001 - 손상된 체크포인트는 다시 스크랩
+                    pass
+
+            prog.start_pf(i, cat)
             try:
-                results.extend(scan_category(page, cat))
-            except Exception as e:  # noqa: BLE001 - 한 카테고리 실패해도 계속
-                results.append(
+                recs = scan_category(page, cat, progress=prog)
+                status = "ok" if any(not x.get("status") for x in recs) else "skip"
+            except Exception as e:  # noqa: BLE001 - 한 PF 실패해도 계속
+                recs = [
                     {
                         "category": cat["name"],
-                        "category_url": cat["href"],
+                        "category_url": cat.get("href"),
+                        "source_pf_url": cat["canon"],
                         "status": f"error: {type(e).__name__}: {e}",
                     }
-                )
+                ]
+                status = "error"
+
+            if ckpt:
+                os.makedirs(RESUME_DIR, exist_ok=True)
+                with open(ckpt, "w", encoding="utf-8") as f:
+                    json.dump(recs, f, ensure_ascii=False, indent=2)
+            results.extend(recs)
+            prog.end_pf(status, len(recs))
+            if progress_file:
+                try:
+                    with open(progress_file, "w", encoding="utf-8") as f:
+                        json.dump(prog.snapshot(len(results)), f, ensure_ascii=False, indent=2)
+                except Exception:  # noqa: BLE001
+                    pass
 
         browser.close()
-
-    print(json.dumps(results, ensure_ascii=False, indent=2))
     return results
+
+
+def main():
+    records = run_scan()
+    verification = verify_counts(records)
+    for v in verification:
+        print(
+            f"[verify] {v['pf_url']}  expected={v.get('expected')}  "
+            f"counts={v.get('counts')}  -> {v['result']}",
+            file=sys.stderr,
+        )
+    out = {"records": records, "count_verification": verification}
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return out
 
 
 if __name__ == "__main__":

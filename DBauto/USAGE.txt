@@ -1,0 +1,328 @@
+================================================================================
+ DBauto  사용법 정리
+ (Samsung PF 검증 도구 + 엑셀 데이터 전처리 도구)
+ 최종 갱신: 2026-09-10
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+0. 파일 구성
+────────────────────────────────────────────────────────────────────────────────
+  verify_samsung_smartphones.py   스크래퍼 본체. samsung.com/us 의 제품 파인더(PF)
+                                  페이지를 순회하며 색상×용량 조합별 SKU + 검증
+                                  필드를 수집. 정렬(Recommended/Newest) 2회 수행.
+                                  PF별 SKU 개수 검증(count_verification) 포함.
+
+  verify.py                       스크랩 결과(JSON) ↔ 실데이터(xlsx) 필드별
+                                  PASS / FAIL 대조. 단독 실행 가능 + 라이브러리.
+
+  run_scope_test.py               ★원스톱★  실데이터 xlsx 하나만 주면
+                                  스크랩 → 제품 dedup → 대조 → result_*.xlsx 리포트
+                                  까지 한 번에. PF 단위 체크포인트로 이어하기 지원.
+
+  scope_test.py                   카테고리별 스모크 테스트. 각 카테고리에서 제품을
+                                  1개씩만 뽑아 파이프라인 동작만 빠르게 확인.
+
+  drop_hidden_products.py         ★데이터 전처리★  엑셀에서 display=no 인 제품을
+                                  전체 시트에서 제거한 새 파일을 생성.
+
+────────────────────────────────────────────────────────────────────────────────
+1. 요구사항
+────────────────────────────────────────────────────────────────────────────────
+  Python 3.10+
+  pip 패키지:  playwright, pandas, openpyxl
+  브라우저   :  로컬에 설치된 Google Chrome
+               (playwright 는 channel="chrome" 로 기존 Chrome 을 그대로 사용.
+                `playwright install` 로 별도 브라우저를 받지 않음 — 사내망 대응)
+
+  동작 확인:
+      python -c "import playwright, pandas, openpyxl; print('ok')"
+      python verify_samsung_smartphones.py            # 곧바로 스크랩 시작되면 정상
+
+
+================================================================================
+ A.  데이터 전처리 도구 :  drop_hidden_products.py
+================================================================================
+
+무엇을 하나
+  1) 기준 시트(product_spec_basics)에서 display 값이  no / n / false / 0  인 행의
+     model_code 를 모은다.
+  2) 워크북의 "모든 시트"에서 그 model_code 에 해당하는 행을 삭제한다.
+  3) 값·헤더는 그대로 둔 새 파일로 저장한다.
+     (셀 서식·수식·열너비 등 스타일은 보존되지 않음 — DB 덤프 전처리용)
+  ※ 20만 행급 시트도 처리 가능하도록 read-only 스트리밍 → write-only 재작성 방식.
+
+기본 실행
+      python drop_hidden_products.py structured-us.xlsx
+        → structured-us.filtered.xlsx  생성 (원본은 그대로)
+
+옵션
+      -o, --output PATH     결과 저장 경로 지정
+      --in-place            원본에 덮어쓰기. 원본은  <이름>.bak.xlsx  로 자동 백업
+      --dry-run             저장하지 않고 "시트별 몇 행이 지워질지" 표만 출력
+      --basics-sheet NAME   기준 시트명            (기본: product_spec_basics)
+      --display-col  NAME   display 컬럼명         (기본: display)
+      --model-col    NAME   model_code 컬럼명      (기본: model_code)
+      --extra-model-cols A,B
+                           model_code 와 동일 취급할 추가 컬럼명 (콤마 구분)
+                           기본: buying_model_code,representative_model
+                           - product_order  시트는 model_code 컬럼이 없어
+                             representative_model 로 매칭
+                           - product_trade_in 시트는 buying_model_code 로 매칭
+                           끄려면:  --extra-model-cols ""
+
+사용 예
+      # 먼저 얼마나 지워지는지 확인
+      python drop_hidden_products.py structured-us.xlsx --dry-run
+
+      # 결과 파일명 지정
+      python drop_hidden_products.py structured-us.xlsx -o clean.xlsx
+
+      # 원본 자체를 정리 (clean.bak.xlsx 백업 생김)
+      python drop_hidden_products.py structured-us.xlsx --in-place
+
+      # display 컬럼명이 다른 워크북
+      python drop_hidden_products.py other.xlsx --display-col is_display --model-col code
+
+출력 예 (--dry-run)
+      sheet                      model_cols            before  deleted   after
+      sr_merged_product          model_code              2943      580    2363
+      product_order              representative_model   19208     3122   16086
+      product_spec_spec          model_code            207466    48444  159022
+      ...
+      TOTAL                                            273120    58437  214683
+
+참고
+  - model_code 매칭 컬럼이 하나도 없는 시트는 "(none - skipped)" 로 건너뜀.
+  - product_cstrt_info 처럼 model_code 값이 번들 ID 인 시트는 자연히 0건.
+  - 종료 코드 0 = 정상. 숨김 대상이 0개면 파일을 만들지 않고 종료.
+
+
+================================================================================
+ B.  검증 도구
+================================================================================
+
+권장 순서:  (B-1) 스모크 테스트로 파이프라인 확인  →  (B-2) 원스톱 전체 검증
+그 외:      (B-3) 스크래퍼만  /  (B-4) 대조만  을 필요할 때 개별 사용
+
+────────────────────────────────────────────────────────────────────────────────
+ B-1.  스모크 테스트 :  scope_test.py
+────────────────────────────────────────────────────────────────────────────────
+목적:  각 카테고리에서 제품 1개씩만 뽑아 "카테고리별로 스크랩이 되긴 하는지" 확인.
+
+      python scope_test.py
+      SAMSUNG_CATEGORIES="Galaxy Ring,Galaxy Tab" python scope_test.py
+      SAMSUNG_MENU="TV & Audio" python scope_test.py
+      SCOPE_FAST=1 python scope_test.py          # 정렬 1개 + 조합 2개까지만 (초고속)
+      SAMSUNG_MAX_COMBOS=3 python scope_test.py  # 제품 1개의 색상×용량 조합 상한
+
+결과:  stderr 진행 로그 / stdout 요약 표 / scope_test_result.json (전체 레코드)
+
+────────────────────────────────────────────────────────────────────────────────
+ B-2.  원스톱 전체 검증 :  run_scope_test.py     ← 보통 이걸 쓴다
+────────────────────────────────────────────────────────────────────────────────
+실데이터 xlsx 하나만 주면:
+   1) 실데이터 로드
+   2) GNB 모든 L0 메뉴의 PF 페이지를 canonical URL 로 dedup 해 순회 스크랩
+      → scrape_YYYYMMDDHHmm.json  (+ .dedup.json)
+   3) (sku, sort_type) 로 제품 레벨 dedup 후 실데이터와 필드별 PASS/FAIL
+   4) result_YYYYMMDDHHmm.xlsx  리포트 저장
+
+기본 실행 (전 메뉴·전 PF·전 조합 — 정확하지만 오래 걸림, 수십 분~수 시간)
+      python run_scope_test.py structured-us.xlsx
+
+자주 쓰는 형태
+      # 카드의 기본(대표) 조합 1개만 → 훨씬 빠름
+      python run_scope_test.py structured-us.xlsx --default-only
+
+      # 실데이터에 등장하는 카테고리만 스캔
+      python run_scope_test.py structured-us.xlsx --from-data
+
+      # 특정 메뉴/카테고리만
+      python run_scope_test.py structured-us.xlsx --menu Mobile
+      python run_scope_test.py structured-us.xlsx --categories "Galaxy Watch,Galaxy Tab"
+
+      # 이미 만든 스크랩 JSON 재사용 (재스크랩 생략, 대조만 다시)
+      python run_scope_test.py structured-us.xlsx --scrape-json scrape_202609092208.json
+
+      # 중단됐다가 이어하기 (PF 단위 체크포인트가 <outdir>/pf_cache 에 쌓임)
+      python run_scope_test.py structured-us.xlsx          # 그냥 다시 실행하면 이어서
+      python run_scope_test.py structured-us.xlsx --fresh  # 캐시 비우고 처음부터
+
+옵션
+      --default-only        카드의 기본(대표) 조합 1개만 수집
+      --max-cards N         PF 당 상위 N개 카드만
+      --menu NAME           L0 메뉴 1개만            (기본: 전체 L0 메뉴)
+      --menus "A,B"         L0 메뉴 여러 개 (쉼표구분)
+      --categories LIST     L1 카테고리 이름 필터 (쉼표구분)
+      --from-data           실데이터의 product_url/카테고리에 등장하는 것만
+      --scrape-json PATH    기존 스크랩 JSON 재사용
+      --verify-sku-sample N PF 마다 첫 N개 variant 는 Quick View 로 SKU 교차검증
+      --resume DIR          PF 체크포인트 폴더 (기본 <outdir>/pf_cache)
+      --fresh               체크포인트 폴더를 비우고 처음부터
+      --progress-file P     진행 상황 JSON 경로 (기본 <outdir>/progress.json)
+      --outdir DIR          결과 저장 폴더 (기본: 현재 폴더)
+
+result_YYYYMMDDHHmm.xlsx 시트 구성
+      Summary      메타 + 집계 (PASS / FAIL / FAIL*(volatile) / SKIP / NOT_FOUND)
+      Detail       model_code × field 별 전체 판정
+      Failures     result=FAIL 만
+      NotFound     실데이터엔 있는데 스크랩에서 매칭 안 된 model_code
+      Ambiguities  같은 (sku, sort_type)인데 PF에 따라 값이 다른 항목
+      SkuAudit     DOM SKU ↔ Quick View SKU 교차검증 불일치 (--verify-sku-sample 시)
+
+종료 코드:  strict FAIL 이 1건이라도 있으면 1, 없으면 0
+
+────────────────────────────────────────────────────────────────────────────────
+ B-3.  스크래퍼 단독 :  verify_samsung_smartphones.py
+────────────────────────────────────────────────────────────────────────────────
+CLI 인자는 없다. 모든 조정은 환경변수로 한다.
+
+      python verify_samsung_smartphones.py > scrape.json 2> scrape.log
+
+표준출력(stdout):  JSON 객체
+      {
+        "records": [ { ...레코드... }, ... ],
+        "count_verification": [ { PF별 SKU 개수 검증 결과 }, ... ]
+      }
+표준에러(stderr):  진행 로그 + [verify] 요약 라인
+
+레코드 주요 필드
+      category, source_pf_url, source_menus
+      sort_type("Recommended"|"Newest"), sorting_no, is_default
+      model_code / sku, model_name, display_name, product_color, capacity
+      standard_price, final_price, currency, on_sale, discount_amount,
+      monthly_price, monthly_months
+      badge, image_url, rep_image_url, product_url, cta_pd_url, family_id
+      review_count, review_rating_score
+      stock_level_status, sku_source("dom"|"dom-stable"|"quickview"...),
+      sku_audit_mismatch(있을 때만)
+
+가격 규칙
+      standard_price = 카드의 정가(price-ux__price-save-was, 없으면 현재가)
+      카드에 "Save $X" 표기가 있으면
+          final_price = standard_price − max(Save $X)        (최대 할인 적용)
+          on_sale = true,  discount_amount = max(Save $X)
+      표기가 없으면
+          final_price = standard_price
+
+개수 검증 (count_verification)
+      PF(canonical path) × sort_type 별 "고유 SKU 수"를 EXPECTED_COUNTS 와 대조.
+        Recommended : actual == expected                       → pass
+        Newest      : expected ≤ actual ≤ expected + N          → pass
+                      (N = SAMSUNG_NEWEST_TOLERANCE, 기본 1.
+                       추출 시점 이후 신제품이 1개까지 늘 수 있어 허용)
+      기대치는 파일 상단 EXPECTED_COUNTS 딕셔너리(비어 있음)에 직접 채우거나
+      SAMSUNG_EXPECTED_COUNTS 환경변수로 JSON 주입:
+        SAMSUNG_EXPECTED_COUNTS='{"/us/watches/all-watches": 30}'
+      MAX_CARDS / MAX_COMBOS / DEFAULT_ONLY 중 하나라도 켜지면 부분 스캔이므로
+      판정 없이 counts 만 보고("skipped: partial scan").
+
+환경변수 레퍼런스
+      SAMSUNG_MENUS            스캔할 L0 메뉴들 (쉼표구분). 미설정 = GNB 전체 메뉴
+      SAMSUNG_MENU            (하위호환) 단일 메뉴 이름. 기본 "Mobile"
+      SAMSUNG_CATEGORIES      L1 카테고리 이름 필터 (예 "Galaxy Watch,Galaxy Tab")
+      SAMSUNG_MAX_CARDS       PF 당 상위 N개 카드만. 0/미설정 = 전체
+      SAMSUNG_MAX_COMBOS      카드당 색상×용량 조합 상한. 0/미설정 = 전체
+      SAMSUNG_DEFAULT_ONLY    1 이면 카드의 기본(대표) 조합 1개만
+      SAMSUNG_RESUME_DIR      PF 단위 체크포인트 폴더. 지정 시 저장·재사용
+      SAMSUNG_EXPECTED_COUNTS 개수 검증 기대치 JSON (canonical path → int)
+      SAMSUNG_NEWEST_TOLERANCE  Newest 개수 허용 오차 (기본 1)
+      SAMSUNG_QV_AUDIT_N      PF 마다 첫 N개 variant Quick View SKU 교차검증
+
+예시
+      # Mobile 메뉴만, Watch·Tab 카테고리만
+      SAMSUNG_MENUS="Mobile" SAMSUNG_CATEGORIES="Galaxy Watch,Galaxy Tab" \
+        python verify_samsung_smartphones.py > scrape.json 2> scrape.log
+
+      # 빠른 확인 (제품 1개, 조합 3개까지)
+      SAMSUNG_MAX_CARDS=1 SAMSUNG_MAX_COMBOS=3 python verify_samsung_smartphones.py
+
+      # 개수 검증까지
+      SAMSUNG_EXPECTED_COUNTS='{"/us/audio-sound/all-audio-sound": 7}' \
+        SAMSUNG_CATEGORIES="Galaxy Buds" python verify_samsung_smartphones.py
+
+────────────────────────────────────────────────────────────────────────────────
+ B-4.  대조 단독 :  verify.py
+────────────────────────────────────────────────────────────────────────────────
+스크랩 결과 JSON 과 실데이터 xlsx 를 받아 필드별 PASS/FAIL 만 다시 계산.
+
+      python verify.py <scraped.json> <expected.xlsx>
+        → 표 출력 + verify_result.json  (종료 코드: strict FAIL 있으면 1)
+
+  ※ 여기서 <scraped.json> 은 "레코드 배열" JSON 이어야 한다.
+     - run_scope_test.py 가 만든  scrape_YYYYMMDDHHmm.json  을 그대로 넣으면 됨.
+     - verify_samsung_smartphones.py 를 직접 돌린 출력은 {"records":[...], ...}
+       형태이므로 records 만 꺼내서 넣는다:
+         python -c "import json,sys; json.dump(json.load(open(sys.argv[1]))['records'], open(sys.argv[2],'w'))" out.json recs.json
+         python verify.py recs.json structured-us.xlsx
+
+판정 규칙
+      EXACT   값이 정확히 일치해야 PASS
+      TOL     ±10%(TOLERANCE_RATIO) 이내면 PASS
+              → review_count, review_rating_score (추출/검증 시점 차이 보정)
+      volatile 필드(final_price, on_sale, stock_level_status, sorting_no)는
+              시점에 따라 정상적으로도 바뀌므로 FAIL 시 "FAIL*" 로 분리 집계.
+      실데이터에 기대값이 없으면 SKIP, 스크랩에 값이 없으면 FAIL.
+
+
+================================================================================
+ C.  전형적인 워크플로우
+================================================================================
+  1) (선택) 실데이터에서 미노출 제품 제거
+       python drop_hidden_products.py structured-us.xlsx -o expected.xlsx
+
+  2) 파이프라인 스모크 테스트
+       SCOPE_FAST=1 python scope_test.py
+
+  3) 원스톱 검증  (처음엔 --default-only 로 빠르게 → 이상 없으면 전체)
+       python run_scope_test.py expected.xlsx --default-only
+       python run_scope_test.py expected.xlsx
+
+  4) 리포트 확인
+       result_YYYYMMDDHHmm.xlsx  의  Summary / Failures / NotFound 시트
+
+  5) 스크랩은 그대로 두고 대조만 다시 하고 싶으면
+       python run_scope_test.py expected.xlsx --scrape-json scrape_XXXX.json
+
+
+================================================================================
+ D.  생성물 / 캐시 파일
+================================================================================
+  scrape_YYYYMMDDHHmm.json         원본 스크랩 레코드 배열
+  scrape_YYYYMMDDHHmm.dedup.json   제품 레벨 dedup 결과 + ambiguities
+  result_YYYYMMDDHHmm.xlsx         최종 검증 리포트
+  verify_result.json              verify.py 단독 실행 결과
+  scope_test_result.json          scope_test.py 결과
+  progress.json                   진행 상황(실시간 갱신)
+  pf_cache/                        PF 단위 체크포인트 (이어하기용)
+  <원본>.filtered.xlsx             drop_hidden_products.py 기본 출력
+  <원본>.bak.xlsx                  drop_hidden_products.py --in-place 백업
+
+  ※ .gitignore 에 *.xlsx, scrape_*.json, result_*.xlsx, pf_cache/, progress.json
+     등이 이미 등록돼 있어 커밋되지 않는다.
+
+
+================================================================================
+ E.  자주 겪는 문제
+================================================================================
+  - 스크랩이 0건 / 카테고리가 계속 skip
+      → 제품 파인더가 화면에 들어와야 카드를 렌더한다(lazy-load). 네트워크가
+        느리면 wait_for_pf 폴링(~30초) 안에 안 뜰 수 있음. 재실행하면 pf_cache
+        덕에 성공한 PF 는 건너뛴다.
+
+  - "Element is outside of the viewport" 류로 조합 일부 실패
+      → 스와이퍼 캐러셀에 가린 칩. JS 클릭으로 폴백하지만 그래도 실패하면 해당
+        레코드에 error 필드가 남고 나머지는 계속 진행된다.
+
+  - 쿠키 배너(TrustArc)가 클릭을 가로챔
+      → dismiss_consent() 가 제거·차단하지만, 매우 느린 회선에서 배너가 뒤늦게
+        다시 뜨면 정렬 전환이 한 번 실패할 수 있음. 재실행 권장.
+
+  - drop_hidden_products.py 가 특정 시트에서 아무 것도 못 지움
+      → 그 시트의 model_code 컬럼명이 다른 것. --model-col / --extra-model-cols
+        로 지정. --dry-run 의 model_cols 열에서 어떤 컬럼을 썼는지 확인.
+
+  - 전체 실행이 너무 오래 걸림
+      → run_scope_test.py --default-only 로 대표 조합만, 또는 --from-data /
+        --categories 로 범위를 좁힌다. 중단해도 pf_cache 로 이어진다.
+================================================================================
