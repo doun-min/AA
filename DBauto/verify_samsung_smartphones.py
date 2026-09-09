@@ -1,18 +1,30 @@
 import json
 import os
 import re
+import sys
 
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
-BASE_URL = "https://www.samsung.com/us/"
+SITE_ROOT = "https://www.samsung.com"
+BASE_URL = SITE_ROOT + "/us/"
 CARD_SELECTOR = ".js-pfv2-product-card.pd21-product-card__item--active"
+
+# 스캔할 상단(L0) 메뉴. 이 메뉴의 하위(L1) 제품 카테고리를 모두 순회한다.
+CATEGORY_MENU = os.environ.get("SAMSUNG_MENU", "Mobile")
 
 # Recommended 로 한 번, Newest 로 한 번 전체 수집한다.
 SORT_SEQUENCE = ["Recommended", "Newest"]
 
 # 디버깅/부분 실행용 (환경변수로 조절). 0 또는 미설정이면 전체.
 MAX_CARDS = int(os.environ.get("SAMSUNG_MAX_CARDS", "0")) or None
+# 카드당 색상 x 용량 조합 수 상한 (테스트용). 0/미설정이면 전체 조합.
+MAX_COMBOS = int(os.environ.get("SAMSUNG_MAX_COMBOS", "0")) or None
+
+# 특정 카테고리만 돌리고 싶을 때: SAMSUNG_CATEGORIES="Galaxy Watch,Galaxy Tab"
+ONLY_CATEGORIES = [
+    c.strip() for c in os.environ.get("SAMSUNG_CATEGORIES", "").split(",") if c.strip()
+]
 
 SKU_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/]{4,}$")
 
@@ -93,6 +105,10 @@ def set_sort(page, sort_name: str):
         "label.pd21-sort__select-option-label"
         f"[data-sort-name='{sort_name}']"
     ).first
+    if option.count() == 0:
+        # 이 카테고리에는 해당 정렬 옵션이 없음
+        page.keyboard.press("Escape")
+        return current
     try:
         option.click(timeout=5000)
     except PWTimeout:
@@ -188,16 +204,24 @@ def _chip_options(card, wrap_class, btn_class):
 
 
 def _click_chip(page, btn):
+    """옵션 칩 클릭. 스와이퍼 캐러셀에 가려 뷰포트 밖이면 JS 클릭으로 폴백."""
+    ok = False
     try:
         btn.scroll_into_view_if_needed(timeout=3000)
-        btn.click(timeout=5000)
-    except PWTimeout:
+        btn.click(timeout=4000)
+        ok = True
+    except Exception:  # noqa: BLE001
         try:
-            btn.click(force=True)
-        except PWTimeout:
-            return False
+            btn.click(force=True, timeout=2000)
+            ok = True
+        except Exception:  # noqa: BLE001
+            try:
+                btn.evaluate("el => el.click()")
+                ok = True
+            except Exception:  # noqa: BLE001
+                ok = False
     page.wait_for_timeout(700)
-    return True
+    return ok
 
 
 def _close_quick_view(page):
@@ -212,57 +236,60 @@ def _close_quick_view(page):
     page.wait_for_timeout(500)
 
 
-def _open_quick_view_once(page, card, prev_sku):
+def _open_quick_view_once(page, card):
     btn = card.locator("button.pd21-product-card__quickview_btn").first
     if btn.count() == 0:
         return None
     try:
         btn.scroll_into_view_if_needed(timeout=3000)
         btn.click(timeout=5000)
-    except PWTimeout:
-        btn.click(force=True)
+    except Exception:  # noqa: BLE001
+        try:
+            btn.click(force=True, timeout=2000)
+        except Exception:  # noqa: BLE001
+            btn.evaluate("el => el.click()")
 
-    sku_loc = page.locator("p.pd21-quick-view__sku:visible").first
+    # 패널이 보이고 SKU 텍스트가 채워질 때까지만 대기 (이전 값과의 비교는 하지 않는다:
+    # 크기 옵션처럼 조합이 바뀌어도 SKU 가 동일할 수 있음).
     try:
         page.wait_for_function(
-            """(prev) => {
+            """() => {
                 const els = document.querySelectorAll('p.pd21-quick-view__sku');
                 for (const el of els) {
                     if (el.offsetParent === null) continue;
-                    const t = (el.textContent || '').trim();
-                    if (t.length > 0 && t !== prev) return true;
+                    if ((el.textContent || '').trim().length > 0) return true;
                 }
                 return false;
             }""",
-            arg=prev_sku or "",
-            timeout=10000,
+            timeout=6000,
         )
     except PWTimeout:
         pass
 
+    sku_loc = page.locator("p.pd21-quick-view__sku:visible").first
     if sku_loc.count():
-        return (sku_loc.inner_text().strip() or None)
+        return sku_loc.inner_text().strip() or None
     any_loc = page.locator("p.pd21-quick-view__sku").first
     return (any_loc.inner_text().strip() or None) if any_loc.count() else None
 
 
-def read_quick_view_sku(page, card, prev_sku):
+def read_quick_view_sku(page, card):
     """Quick view 슬라이드를 열어 p.pd21-quick-view__sku 값을 읽고 다시 닫는다.
 
-    콜드 상태의 첫 조합에서 패널 렌더가 늦어 빈 값이 나오는 경우가 있어 한 번 재시도한다.
+    빈 값/형식 불일치일 때만 한 번 더 시도한다 (렌더 지연 대비).
     """
     sku = None
-    for attempt in range(2):
-        sku = _open_quick_view_once(page, card, prev_sku)
+    for _ in range(2):
+        sku = _open_quick_view_once(page, card)
         _close_quick_view(page)
-        if sku and SKU_RE.match(sku) and sku != prev_sku:
+        if sku and SKU_RE.match(sku):
             break
-        page.wait_for_timeout(600)
+        page.wait_for_timeout(500)
     return sku
 
 
-def extract_card_variants(page, card, base, sort_type, state):
-    """카드의 모든 색상 x 용량 조합을 순회하며 SKU 를 수집."""
+def extract_card_variants(page, card, base, sort_type):
+    """카드의 모든 색상 x 용량(또는 사이즈) 조합을 순회하며 SKU 를 수집."""
     records = []
     colors = _chip_options(
         card, "option-selector-v2__wrap--color-chip", "option-selector-v2__color"
@@ -282,6 +309,8 @@ def extract_card_variants(page, card, base, sort_type, state):
             caps = [(None, None)]
 
         for capacity, cap_btn in caps:
+            if MAX_COMBOS and len(records) >= MAX_COMBOS:
+                return records
             if cap_btn is not None:
                 _click_chip(page, cap_btn)
 
@@ -297,12 +326,10 @@ def extract_card_variants(page, card, base, sort_type, state):
                 }
             )
             try:
-                sku = read_quick_view_sku(page, card, state.get("prev_sku"))
-                rec["sku"] = sku
-                if sku and SKU_RE.match(sku):
-                    state["prev_sku"] = sku
+                rec["sku"] = read_quick_view_sku(page, card)
             except Exception as e:  # noqa: BLE001 - 조합 하나 실패해도 계속 진행
                 rec["error"] = f"{type(e).__name__}: {e}"
+                _close_quick_view(page)
 
             records.append(rec)
     return records
@@ -318,7 +345,6 @@ def extract_all(page, sort_type):
     if MAX_CARDS:
         total = min(total, MAX_CARDS)
 
-    state = {"prev_sku": None}
     results = []
     for i in range(total):
         card = cards.nth(i)
@@ -326,39 +352,199 @@ def extract_all(page, sort_type):
             card.scroll_into_view_if_needed(timeout=3000)
         except PWTimeout:
             pass
-        base = extract_card_base(card)
-        results.extend(extract_card_variants(page, card, base, sort_type, state))
+        try:
+            base = extract_card_base(card)
+            results.extend(
+                extract_card_variants(page, card, base, sort_type)
+            )
+        except Exception as e:  # noqa: BLE001 - 카드 하나 실패해도 다음 카드 진행
+            results.append(
+                {
+                    "sort_type": sort_type,
+                    "product_id": card.get_attribute("data-productidx"),
+                    "status": f"card error: {type(e).__name__}: {e}",
+                }
+            )
+            _close_quick_view(page)
     return results
+
+
+# --------------------------------------------------------------------------- #
+# 카테고리 (Mobile L0 메뉴의 하위 제품군) 탐색 & 이동
+# --------------------------------------------------------------------------- #
+_DISCOVER_JS = r"""
+(menuText) => {
+    const l0 = [...document.querySelectorAll('a.nv00-gnb-v4__l0-menu-link')]
+        .find((a) => a.textContent.trim().toLowerCase().startsWith(menuText.toLowerCase()));
+    if (!l0) return [];
+    let node = l0;
+    while (node && node.parentElement) {
+        node = node.parentElement;
+        if (node.querySelector && node.querySelector('a.nv00-gnb-v4__l1-menu-link')) break;
+    }
+    const seen = new Set();
+    const out = [];
+    for (const a of node.querySelectorAll('a.nv00-gnb-v4__l1-menu-link')) {
+        const text = a.textContent.trim().replace(/\s+/g, ' ');
+        const href = a.getAttribute('href');
+        if (!text || !href || seen.has(href)) continue;
+        seen.add(href);
+        out.push({ name: text.replace(/\s*NEW$/i, '').trim(), href: href });
+    }
+    return out;
+}
+"""
+
+
+def discover_categories(page):
+    """CATEGORY_MENU 플라이아웃을 열어 [{name, href}, ...] 를 반환."""
+    try:
+        page.locator(
+            "a.nv00-gnb-v4__l0-menu-link", has_text=CATEGORY_MENU
+        ).first.hover()
+        page.wait_for_timeout(1000)
+    except Exception:  # noqa: BLE001
+        pass
+    cats = page.evaluate(_DISCOVER_JS, CATEGORY_MENU)
+    if ONLY_CATEGORIES:
+        cats = [c for c in cats if c["name"] in ONLY_CATEGORIES]
+    return cats
+
+
+def navigate_to_category(page, cat):
+    """Mobile 메뉴에 다시 hover 해서 해당 카테고리 링크를 클릭. 실패하면 URL 직접 이동."""
+    href = cat["href"]
+    clicked = False
+    try:
+        page.locator(
+            "a.nv00-gnb-v4__l0-menu-link", has_text=CATEGORY_MENU
+        ).first.hover()
+        page.wait_for_timeout(900)
+        link = page.locator(
+            f".nv00-gnb-v4__l0-menu--show a.nv00-gnb-v4__l1-menu-link[href='{href}']"
+        ).first
+        if link.count():
+            link.click(timeout=8000)
+            clicked = True
+    except Exception:  # noqa: BLE001
+        clicked = False
+    if not clicked:
+        url = href if href.startswith("http") else SITE_ROOT + href
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(2500)
+    dismiss_consent(page)
+
+
+def _trigger_lazy_load(page):
+    """제품 파인더는 화면에 들어와야 카드를 렌더한다(IntersectionObserver).
+    파인더 영역으로 스크롤한 뒤, 안 되면 페이지 전체를 훑어 내린다."""
+    try:
+        finder = page.locator(".js-pfv2-finder, .pd21-product-finder").first
+        if finder.count():
+            finder.scroll_into_view_if_needed(timeout=4000)
+            page.wait_for_timeout(1500)
+    except Exception:  # noqa: BLE001
+        pass
+    if page.locator(CARD_SELECTOR).count() > 0:
+        return
+    for _ in range(12):
+        page.mouse.wheel(0, 1400)
+        page.wait_for_timeout(800)
+        if page.locator(CARD_SELECTOR).count() > 0:
+            break
+    page.wait_for_timeout(1500)
+
+
+def wait_for_pf(page, timeout_ms=15000):
+    """제품 파인더 그리드(활성 카드)가 나타나면 True."""
+    try:
+        page.wait_for_selector(CARD_SELECTOR, timeout=timeout_ms)
+    except PWTimeout:
+        pass
+    if page.locator(CARD_SELECTOR).count() == 0:
+        _trigger_lazy_load(page)
+    # 렌더가 느린 파인더 대비 최대 ~30초 폴링
+    for _ in range(15):
+        if page.locator(CARD_SELECTOR).count() > 0:
+            page.wait_for_timeout(1200)
+            return True
+        page.wait_for_timeout(2000)
+    return page.locator(CARD_SELECTOR).count() > 0
 
 
 # --------------------------------------------------------------------------- #
 # 진입점
 # --------------------------------------------------------------------------- #
+def scan_category(page, cat):
+    """한 카테고리에서 두 정렬 모두 전체 추출. 그리드가 없으면 skip 마커 1건 반환."""
+    navigate_to_category(page, cat)
+    if not wait_for_pf(page):
+        return [
+            {
+                "category": cat["name"],
+                "category_url": cat["href"],
+                "status": "skipped: no product-finder grid",
+            }
+        ]
+
+    out = []
+    done_sorts = set()
+    for sort_name in SORT_SEQUENCE:
+        try:
+            applied = set_sort(page, sort_name)
+        except PWTimeout:
+            applied = sort_name
+        sort_type = (applied or sort_name).strip()
+        # 이 카테고리에 해당 정렬이 없어 이전 패스와 같은 결과가 되면 건너뛴다.
+        if sort_type.lower() in done_sorts:
+            print(
+                f"[info]   '{sort_name}' unavailable here -> skip duplicate pass",
+                file=sys.stderr,
+            )
+            continue
+        done_sorts.add(sort_type.lower())
+        for rec in extract_all(page, sort_type):
+            rec["category"] = cat["name"]
+            rec["category_url"] = cat["href"]
+            out.append(rec)
+    return out
+
+
 def main():
     results = []
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="chrome", headless=True)
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        page = browser.new_page(
+            viewport={"width": 1440, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/128.0.0.0 Safari/537.36"
+            ),
+        )
         page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(2000)
-
-        # 쿠키 동의 배너가 상단 메뉴 hover / 클릭을 가로채는 것을 방지
         dismiss_consent(page)
 
-        page.locator("a.nv00-gnb-v4__l0-menu-link", has_text="Mobile").first.hover()
-        page.wait_for_timeout(800)
-        page.locator(
-            "a.nv00-gnb-v4__l1-menu-link", has_text="Galaxy Smartphones"
-        ).first.click()
+        categories = discover_categories(page)
+        print(
+            f"[info] {CATEGORY_MENU}: {len(categories)} categories -> "
+            + ", ".join(c["name"] for c in categories),
+            file=sys.stderr,
+        )
 
-        page.wait_for_selector(CARD_SELECTOR, timeout=30000)
-        page.wait_for_timeout(1500)
-        dismiss_consent(page)
-
-        for sort_name in SORT_SEQUENCE:
-            applied = set_sort(page, sort_name)
-            sort_type = (applied or sort_name).strip()
-            results.extend(extract_all(page, sort_type))
+        for cat in categories:
+            print(f"[info] scanning: {cat['name']} ({cat['href']})", file=sys.stderr)
+            try:
+                results.extend(scan_category(page, cat))
+            except Exception as e:  # noqa: BLE001 - 한 카테고리 실패해도 계속
+                results.append(
+                    {
+                        "category": cat["name"],
+                        "category_url": cat["href"],
+                        "status": f"error: {type(e).__name__}: {e}",
+                    }
+                )
 
         browser.close()
 

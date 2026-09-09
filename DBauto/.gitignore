@@ -1,0 +1,3 @@
+__pycache__/
+*.pyc
+scope_test_result.json
