@@ -129,6 +129,8 @@ def write_report(path, summary, rows, meta, ambiguities, sku_mismatches=()):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("expected", help="검증 대상 실데이터 xlsx")
+    ap.add_argument("--site", default="us", choices=["us", "ca", "ca_fr"],
+                    help="대상 사이트 (samsung.com/<site>)")
     ap.add_argument("--scrape-json", help="기존 스크랩 JSON 재사용")
     ap.add_argument("--max-cards", type=int, default=0)
     ap.add_argument("--default-only", action="store_true")
@@ -147,13 +149,16 @@ def main():
     if not os.path.exists(args.expected):
         ap.error(f"파일 없음: {args.expected}")
 
+    scraper.set_site(args.site)  # BASE_URL / SITE / 통화 갱신
+
     ts = datetime.now().strftime("%Y%m%d%H%M")
+    tag = args.site  # 파일명에 사이트 구분자
     os.makedirs(args.outdir, exist_ok=True)
-    scrape_path = os.path.join(args.outdir, f"scrape_{ts}.json")
-    dedup_path = os.path.join(args.outdir, f"scrape_{ts}.dedup.json")
-    result_path = os.path.join(args.outdir, f"result_{ts}.xlsx")
-    progress_file = args.progress_file or os.path.join(args.outdir, "progress.json")
-    resume_dir = args.resume or os.path.join(args.outdir, "pf_cache")
+    scrape_path = os.path.join(args.outdir, f"scrape_{tag}_{ts}.json")
+    dedup_path = os.path.join(args.outdir, f"scrape_{tag}_{ts}.dedup.json")
+    result_path = os.path.join(args.outdir, f"result_{tag}_{ts}.xlsx")
+    progress_file = args.progress_file or os.path.join(args.outdir, f"progress_{tag}.json")
+    resume_dir = args.resume or os.path.join(args.outdir, f"pf_cache_{tag}")
 
     # 1) 기대값 로드
     expected, order_map = load_expected(args.expected)
@@ -185,7 +190,8 @@ def main():
         scraper.QV_AUDIT_N = args.verify_sku_sample or 0
         scraper.RESUME_DIR = resume_dir
         print(
-            f"[2/4] scraping menus={menus or 'ALL'} categories={only or 'ALL'} "
+            f"[2/4] scraping site={args.site} ({scraper.BASE_URL}) "
+            f"menus={menus or 'ALL'} categories={only or 'ALL'} "
             f"max_cards={scraper.MAX_CARDS} default_only={scraper.DEFAULT_ONLY} "
             f"resume_dir={resume_dir}",
             file=sys.stderr,
@@ -231,6 +237,7 @@ def main():
     # 4) 리포트 저장
     meta = {
         "run_at": datetime.now().isoformat(timespec="seconds"),
+        "site": args.site,
         "expected_file": os.path.abspath(args.expected),
         "scrape_json": os.path.abspath(scrape_path),
         "scrape_reused": bool(args.scrape_json),

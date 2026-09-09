@@ -7,5 +7,5 @@ scope_test_result.json
 verify_result.json
 scrape_*.json
 result_*.xlsx
-progress.json
-pf_cache/
+progress*.json
+pf_cache*/

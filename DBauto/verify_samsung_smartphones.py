@@ -8,8 +8,30 @@ from urllib.parse import unquote
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
+# Windows 콘솔(cp949)에서도 불어(é 등) 출력이 깨지지 않도록
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+
 SITE_ROOT = "https://www.samsung.com"
-BASE_URL = SITE_ROOT + "/us/"
+
+# 대상 사이트: us | ca | ca_fr  (URL 경로 프리픽스 그대로)
+SITE = (os.environ.get("SAMSUNG_SITE", "us") or "us").strip().lower()
+_SITE_CURRENCY = {"us": "USD", "ca": "CAD", "ca_fr": "CAD"}
+BASE_URL = f"{SITE_ROOT}/{SITE}/"
+SITE_CURRENCY = _SITE_CURRENCY.get(SITE, "USD")
+
+
+def set_site(site):
+    """run_scope_test 등에서 스캔 사이트를 런타임에 바꿀 때 사용."""
+    global SITE, BASE_URL, SITE_CURRENCY
+    SITE = (site or "us").strip().lower()
+    BASE_URL = f"{SITE_ROOT}/{SITE}/"
+    SITE_CURRENCY = _SITE_CURRENCY.get(SITE, "USD")
+
+
 CARD_SELECTOR = ".js-pfv2-product-card.pd21-product-card__item--active"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -30,7 +52,8 @@ MENUS = (
 RESUME_DIR = os.environ.get("SAMSUNG_RESUME_DIR") or None
 
 # Recommended 로 한 번, Newest 로 한 번 전체 수집한다.
-SORT_SEQUENCE = ["Recommended", "Newest"]
+# (정규화 이름, sort code) — code 는 사이트/언어와 무관하게 동일하다.
+SORT_SEQUENCE = [("Recommended", "recommended"), ("Newest", "newest")]
 
 # 디버깅/부분 실행용 (환경변수로 조절). 0 또는 미설정이면 전체.
 MAX_CARDS = int(os.environ.get("SAMSUNG_MAX_CARDS", "0")) or None
@@ -93,42 +116,103 @@ EXACT_MATCH_FIELDS = [
     "is_default",
 ]
 
-_CUR_SYMBOL = {"$": "USD", "US$": "USD", "USD": "USD"}
+_CUR_SYMBOL = {
+    "US$": "USD", "USD": "USD", "CA$": "CAD", "CAD": "CAD", "C$": "CAD",
+    "€": "EUR", "£": "GBP", "₩": "KRW",
+}
+_CUR_TOKEN = r"US\$|CA\$|C\$|USD|CAD|\$|€|£|₩"
+# 금액: 앞/뒤 어디든 통화 기호 허용, 천단위(., ,, 공백/nbsp) + 소수(., ,) 혼용
+_MONEY_RE = re.compile(
+    rf"(?:(?P<pre>{_CUR_TOKEN})\s*)?"
+    r"(?P<num>\d[\d\s .,]*\d|\d)"
+    rf"(?:\s*(?P<post>{_CUR_TOKEN}))?"
+)
+_MONTHLY_TAIL_RE = re.compile(r"^\s*/\s*mo(?:is|nth)?s?\b", re.I)
+_MONTHS_RE = re.compile(r"(?:for|pour|pendant)\s*(\d+)\s*mo(?:is|nths?|s)?\b", re.I)
+
+
+def _parse_amount(num_str):
+    """'1,799.99' / '1 049,99' / '1.799,99' / '949,99' -> float. 실패 시 None."""
+    s = str(num_str).strip().replace(" ", " ").replace(" ", "")
+    if not s:
+        return None
+    if "," in s and "." in s:
+        # 뒤에 오는 구분자를 소수점으로 본다
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s:
+        parts = s.split(",")
+        if len(parts) == 2 and len(parts[1]) in (1, 2):
+            s = parts[0] + "." + parts[1]          # 불어 소수점
+        else:
+            s = s.replace(",", "")                 # 천단위
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _iter_money(text):
+    """(amount, currency_raw, is_monthly) 를 순서대로 yield."""
+    if not text:
+        return
+    for m in _MONEY_RE.finditer(text):
+        num = m.group("num")
+        cur = m.group("pre") or m.group("post")
+        has_dec = bool(re.search(r"[.,]\d{1,2}$", num.replace(" ", " ").replace(" ", "")))
+        if not cur and not has_dec:
+            continue  # 'for 24 mos' 같은 순수 정수는 금액 아님
+        amt = _parse_amount(num)
+        if amt is None:
+            continue
+        is_monthly = bool(_MONTHLY_TAIL_RE.match(text[m.end():m.end() + 10]))
+        yield amt, cur, is_monthly
+
+
+def _money_from(text):
+    """문자열에서 (full_price, monthly_price, currency) 추출.
+    full = 월납 아닌 금액 중 최댓값, monthly = 월납 금액 중 최솟값.
+    """
+    full, monthly, cur = [], [], None
+    for amt, craw, is_monthly in _iter_money(text):
+        if cur is None and craw:
+            cur = _CUR_SYMBOL.get(craw.upper(), craw)
+        (monthly if is_monthly else full).append(amt)
+    return (max(full) if full else None), (min(monthly) if monthly else None), cur
 
 
 def _to_number(text):
     if text is None:
         return None
-    m = re.search(r"[\d,]+\.?\d*", str(text))
-    return float(m.group(0).replace(",", "")) if m else None
+    m = re.search(r"\d[\d\s .,]*\d|\d", str(text))
+    return _parse_amount(m.group(0)) if m else None
 
 
-def parse_price_save(text: str):
+def parse_price_save(text):
+    """취소선(정가) 문자열 -> {'currency', 'price'}."""
     if not text:
         return None
-    m = re.match(r"\s*([^\d]+)\s*([\d,]+\.?\d*)", text)
-    if not m:
-        return {"currency": None, "price": None}
-    currency, price = m.group(1).strip(), m.group(2).replace(",", "")
-    return {"currency": currency, "price": float(price)}
+    full, _m, cur = _money_from(text)
+    return {"currency": cur, "price": full}
 
 
-def parse_price_current(text: str):
-    """'From $1,799.99 or $75.00/mo for 24mo' 같은 현재가 문자열 파싱."""
+def parse_price_current(text):
+    """'From $1,799.99 or $75.00/mo for 24mo' / 'Prix total: 949,99 $' 등 현재가 파싱."""
     if not text:
         return {}
+    full, monthly, cur = _money_from(text)
     out = {}
-    cur = re.search(r"(US\$|USD|\$|€|£|₩)", text)
+    if full is not None:
+        out["final_price"] = full
+    if monthly is not None:
+        out["monthly_price"] = monthly
     if cur:
-        out["currency"] = _CUR_SYMBOL.get(cur.group(1), cur.group(1))
-    # 첫 번째 금액 = 현재가(최종가)
-    amt = re.search(r"(?:US\$|USD|\$|€|£|₩)\s*([\d,]+\.?\d*)", text)
-    if amt:
-        out["final_price"] = float(amt.group(1).replace(",", ""))
-    mo = re.search(r"([\d,]+\.?\d*)\s*/\s*mo(?:nth)?\s*for\s*(\d+)\s*mo", text, re.I)
+        out["currency"] = cur
+    mo = _MONTHS_RE.search(text)
     if mo:
-        out["monthly_price"] = float(mo.group(1).replace(",", ""))
-        out["monthly_months"] = int(mo.group(2))
+        out["monthly_months"] = int(mo.group(1))
     return out
 
 
@@ -174,46 +258,76 @@ def dismiss_consent(page):
 # 정렬 (Sort) 제어
 # --------------------------------------------------------------------------- #
 def read_current_sort(page):
-    """현재 선택된 정렬 이름 (예: 'Recommended')."""
+    """현재 선택된 정렬의 표시 이름 (로케일에 따라 다를 수 있음, 로그용)."""
     el = first_or_none(page, "span.pd21-sort__opener-name")
-    return el.inner_text().strip() if el else None
+    return " ".join(el.inner_text().split()) if el else None
 
 
-def set_sort(page, sort_name: str):
-    """정렬 드롭다운을 열어 sort_name 옵션을 선택하고 그리드가 다시 그려질 때까지 대기."""
-    current = read_current_sort(page)
-    if current and current.strip().lower() == sort_name.lower():
-        return current
+def read_current_sort_code(page):
+    """현재 선택된 정렬 코드 ('recommended' / 'newest' ...). 사이트/언어 불문 동일.
 
+    체크된 라디오 input 의 id 로 판정한다 (US/CA 공통).
+    """
+    el = first_or_none(
+        page,
+        ".pd21-sort__contents input[type='radio']:checked, "
+        ".pd21-sort__list input[type='radio']:checked",
+    )
+    if el:
+        cid = el.get_attribute("id")
+        if cid:
+            return cid.strip().lower()
+    lbl = first_or_none(
+        page, "label.pd21-sort__select-option-label:has(input:checked)"
+    )
+    return (lbl.get_attribute("data-sort-code") or "").strip().lower() or None if lbl else None
+
+
+def set_sort(page, sort_name, sort_code):
+    """정렬을 sort_code 로 바꾸고 그리드 재렌더까지 대기.
+
+    반환: 적용된 정규화 이름(sort_name) / 이 PF 에 해당 정렬이 없으면 None.
+    US 는 label[data-sort-code], CA 는 label[for=code] / input#code 를 쓴다.
+    """
     dismiss_consent(page)
     opener = page.locator("button.pd21-sort__opener").first
-    opener.scroll_into_view_if_needed()
+    if opener.count() == 0:
+        return None
+    try:
+        opener.scroll_into_view_if_needed(timeout=3000)
+    except PWTimeout:
+        pass
+
+    if read_current_sort_code(page) == sort_code:
+        return sort_name
+
     opener.click()
     page.wait_for_timeout(500)
+    if read_current_sort_code(page) == sort_code:
+        page.keyboard.press("Escape")
+        return sort_name
 
-    code = sort_name.lower().replace(" ", "")
     option = page.locator(
-        "label.pd21-sort__select-option-label"
-        f"[data-sort-code='{code}'], "
-        "label.pd21-sort__select-option-label"
-        f"[data-sort-name='{sort_name}']"
+        f".pd21-sort label.pd21-sort__select-option-label[data-sort-code='{sort_code}'], "
+        f".pd21-sort label[for='{sort_code}'], "
+        f".pd21-sort input#{sort_code}"
     ).first
     if option.count() == 0:
-        # 이 카테고리에는 해당 정렬 옵션이 없음
         page.keyboard.press("Escape")
-        return current
+        return None  # 이 PF/사이트에 해당 정렬 없음
     try:
         option.click(timeout=5000)
-    except PWTimeout:
-        # 라디오 input 이 시각적으로 숨겨져 있어 label 클릭이 막히면 강제 클릭
-        option.click(force=True)
+    except Exception:  # noqa: BLE001 - 숨겨진 라디오 등
+        try:
+            option.click(force=True, timeout=2000)
+        except Exception:  # noqa: BLE001
+            option.evaluate("el => el.click()")
 
     # 모바일 레이아웃은 Apply 버튼을 눌러야 반영됨 (데스크톱은 즉시 반영)
     apply_btn = page.locator("button.pd21-sort__apply-cta-mob")
     if apply_btn.count() and apply_btn.first.is_visible():
         apply_btn.first.click()
 
-    # 그리드 재렌더 대기
     try:
         page.wait_for_load_state("networkidle", timeout=15000)
     except PWTimeout:
@@ -221,7 +335,7 @@ def set_sort(page, sort_name: str):
     page.wait_for_timeout(1500)
     page.wait_for_selector(CARD_SELECTOR, timeout=30000)
     page.wait_for_timeout(1000)
-    return read_current_sort(page)
+    return sort_name
 
 
 # --------------------------------------------------------------------------- #
@@ -316,14 +430,28 @@ def extract_card_base(card):
         or (link_el.get_attribute("href") if link_el else None)
     )
 
-    # 구매 링크: 스마트폰은 href 에 '/buy' 가 있지만 가전은 곧바로 PDP 로 간다.
-    # 링크 안의 Buy 버튼(an-ac="Buy")으로 식별한다.
+    # 구매 링크:
+    #   US 스마트폰  : a.cta__link[href*='/buy']
+    #   US 가전      : a.cta__link:has(button[an-ac='Buy'])  (href 에 /buy 없음)
+    #   CA/CA_FR     : a.js-pfv2-buy-now (href='javascript:;', 경로는 data-config_info)
     buy_el = first_or_none(
         card,
         "div.pd21-product-card__cta a.cta__link:has(button[an-ac='Buy']), "
-        "div.pd21-product-card__cta a.cta__link[href*='/buy']",
+        "div.pd21-product-card__cta a.cta__link[href*='/buy'], "
+        "div.pd21-product-card__cta a.js-pfv2-buy-now, "
+        "div.pd21-product-card__cta a[data-config_info]",
     )
-    buy_url = buy_el.get_attribute("href") if buy_el else None
+    buy_url = None
+    if buy_el:
+        href = (buy_el.get_attribute("href") or "").strip()
+        if href and not href.lower().startswith("javascript:"):
+            buy_url = href
+        buy_url = (
+            buy_url
+            or buy_el.get_attribute("data-config_info")
+            or buy_el.get_attribute("data-link_info")
+            or None
+        )
 
     family_id = None
     is_multi_group = False
@@ -378,24 +506,21 @@ def _checked_chip_value(card, wrap_class):
     if not v:
         t = slide.locator("span.option-selector-v2__size-text")
         v = t.inner_text().strip() if t.count() else slide.get_attribute("data-chip-code")
+    if not v:
+        btn = slide.locator("button").first
+        if btn.count():
+            v = _chip_label_from_btn(btn)
     return v
 
 
-_SAVE_RE = re.compile(r"(?:save|[-−])\s*(?:US\$|USD|\$|€|£|₩)?\s*([\d,]+\.?\d*)", re.I)
-
-
 def _max_save(card):
-    """카드에 표기된 모든 'Save $X' 중 최댓값(최대 할인액). 없으면 None."""
+    """카드에 표기된 모든 할인액(Save $X / Économisez X $ / -X $) 중 최댓값. 없으면 None."""
     hi = card.locator("div.price-ux__wrap span.price-ux__price-save-highlight")
     saves = []
     for i in range(hi.count()):
-        m = _SAVE_RE.search(hi.nth(i).inner_text() or "")
-        if m:
-            saves.append(float(m.group(1).replace(",", "")))
-        else:  # 'Save' 키워드 없이 금액만 있는 변형 대비
-            v = _to_number(hi.nth(i).inner_text())
-            if v is not None:
-                saves.append(v)
+        full, _m, _c = _money_from(hi.nth(i).inner_text() or "")
+        if full is not None:
+            saves.append(full)
     return max(saves) if saves else None
 
 
@@ -423,7 +548,7 @@ def read_prices(card):
     cur = first_or_none(card, "div.price-ux__wrap .price-ux__price-current")
 
     cur_info = parse_price_current(cur.inner_text()) if cur else {}
-    current_price = cur_info.get("final_price")  # 현재가 문자열의 첫 금액
+    current_price = cur_info.get("final_price")  # 월납이 아닌 실제 현재가
     out["currency"] = cur_info.get("currency")
     out["monthly_price"] = cur_info.get("monthly_price")
     out["monthly_months"] = cur_info.get("monthly_months")
@@ -432,7 +557,11 @@ def read_prices(card):
         ps = parse_price_save(was.inner_text().strip())
         out["standard_price"] = ps.get("price") if ps else None
         if out["currency"] is None and ps and ps.get("currency"):
-            out["currency"] = _CUR_SYMBOL.get(ps["currency"], ps["currency"])
+            out["currency"] = ps["currency"]
+
+    # 통화 기호($)만으로는 USD/CAD 구분이 안 되므로 사이트 기준으로 확정
+    if out["currency"] in (None, "$"):
+        out["currency"] = SITE_CURRENCY
 
     save = _max_save(card)
     if save is not None:
@@ -483,6 +612,21 @@ def read_card_modelcode(card):
     return link.get_attribute("data-modelcode") if link else None
 
 
+def _chip_label_from_btn(btn):
+    """CA/CA_FR 칩은 slide 에 data-chip-value 가 없다. 버튼의 an-la='color:titanium gray'
+    / aria-label / hidden span 에서 라벨을 뽑는다."""
+    al = btn.get_attribute("an-la") or btn.get_attribute("aria-label") or ""
+    m = re.search(r"[:\-]\s*(.+)$", al)
+    if m:
+        return m.group(1).strip()
+    hs = btn.locator("span.hidden, span.blind, span.option-selector-v2__color-name")
+    if hs.count():
+        t = hs.first.inner_text().strip()
+        if t and t.lower() != "selected":
+            return t
+    return None
+
+
 def _chip_options(card, wrap_class, btn_class):
     """(라벨, 버튼 로케이터) 목록을 반환. 옵션 셀렉터가 없으면 빈 리스트."""
     wrap = card.locator(f"div.{wrap_class}")
@@ -501,6 +645,8 @@ def _chip_options(card, wrap_class, btn_class):
                 if txt.count()
                 else slide.get_attribute("data-chip-code")
             )
+        if not label:
+            label = _chip_label_from_btn(btns.nth(i))
         out.append((label or f"opt{i}", btns.nth(i)))
     return out
 
@@ -821,7 +967,7 @@ _DISCOVER_JS = r"""
         const href = a.getAttribute('href');
         if (!text || !href || seen.has(href)) continue;
         seen.add(href);
-        out.push({ name: text.replace(/\s*NEW$/i, '').trim(), href: href });
+        out.push({ name: text.replace(/\s*(NEW|NOUVEAUT\u00c9|NOUVEAUTE|NOUVEAU)$/i, '').trim(), href: href });
     }
     return out;
 }
@@ -857,7 +1003,7 @@ _DISCOVER_ALL_JS = r"""
         if (!node) continue;
         const seen = new Set();
         for (const a of node.querySelectorAll('a.nv00-gnb-v4__l1-menu-link')) {
-            const text = a.textContent.trim().replace(/\s+/g, ' ').replace(/\s*NEW$/i, '').trim();
+            const text = a.textContent.trim().replace(/\s+/g, ' ').replace(/\s*(NEW|NOUVEAUT\u00c9|NOUVEAUTE|NOUVEAU)$/i, '').trim();
             const href = a.getAttribute('href');
             if (!href || seen.has(href)) continue;
             seen.add(href);
@@ -886,7 +1032,7 @@ def _looks_like_pf(canon):
     if not canon or "-sku-" in canon:
         return False
     segs = [s for s in canon.strip("/").split("/") if s]
-    if not segs or segs[0] != "us" or not (2 <= len(segs) <= 4):
+    if not segs or segs[0] != SITE or not (2 <= len(segs) <= 4):
         return False
     if segs[-1] in ("buy", "buy-now"):  # 구매 플로우 페이지
         return False
@@ -1065,16 +1211,17 @@ def scan_category(page, cat, progress=None):
 
     out = []
     done_sorts = set()
-    for sort_name in SORT_SEQUENCE:
+    for sort_name, sort_code in SORT_SEQUENCE:
         try:
-            applied = set_sort(page, sort_name)
+            applied = set_sort(page, sort_name, sort_code)
         except PWTimeout:
-            applied = sort_name
-        sort_type = (applied or sort_name).strip()
-        if sort_type.lower() in done_sorts:  # 이 PF 에 해당 정렬이 없음 -> 중복 패스 skip
+            applied = None
+        if not applied:  # 이 PF/사이트에 해당 정렬이 없음
             continue
-        done_sorts.add(sort_type.lower())
-        for rec in extract_all(page, sort_type, progress=progress):
+        if applied in done_sorts:
+            continue
+        done_sorts.add(applied)
+        for rec in extract_all(page, applied, progress=progress):
             rec["category"] = cat["name"]
             rec["category_url"] = cat.get("href")
             rec["source_pf_url"] = canon

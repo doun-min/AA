@@ -7,10 +7,11 @@
 ────────────────────────────────────────────────────────────────────────────────
 0. 파일 구성
 ────────────────────────────────────────────────────────────────────────────────
-  verify_samsung_smartphones.py   스크래퍼 본체. samsung.com/us 의 제품 파인더(PF)
+  verify_samsung_smartphones.py   스크래퍼 본체. samsung.com/<site> 의 제품 파인더(PF)
                                   페이지를 순회하며 색상×용량 조합별 SKU + 검증
                                   필드를 수집. 정렬(Recommended/Newest) 2회 수행.
                                   PF별 SKU 개수 검증(count_verification) 포함.
+                                  site = us | ca | ca_fr (섹션 D 참고).
 
   verify.py                       스크랩 결과(JSON) ↔ 실데이터(xlsx) 필드별
                                   PASS / FAIL 대조. 단독 실행 가능 + 라이브러리.
@@ -130,6 +131,14 @@
 기본 실행 (전 메뉴·전 PF·전 조합 — 정확하지만 오래 걸림, 수십 분~수 시간)
       python run_scope_test.py structured-us.xlsx
 
+다른 사이트 (samsung.com/ca, /ca_fr)
+      python run_scope_test.py structured-ca.xlsx    --site ca    --fresh
+      python run_scope_test.py structured-ca-fr.xlsx --site ca_fr --fresh
+      → 결과/캐시가 사이트별로 분리됨:
+        scrape_<site>_*.json / result_<site>_*.xlsx / pf_cache_<site>/ / progress_<site>.json
+      ※ ca_fr 은 GNB 메뉴/정렬 라벨이 프랑스어지만 sort code·URL 슬러그는 영어라
+        --menu/--categories 없이(전체) 돌리는 걸 권장. 필요하면 프랑스어 이름을 넣는다.
+
 자주 쓰는 형태
       # 카드의 기본(대표) 조합 1개만 → 훨씬 빠름
       python run_scope_test.py structured-us.xlsx --default-only
@@ -218,6 +227,7 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
       판정 없이 counts 만 보고("skipped: partial scan").
 
 환경변수 레퍼런스
+      SAMSUNG_SITE             대상 사이트: us | ca | ca_fr (기본 us). BASE_URL·통화 결정
       SAMSUNG_MENUS            스캔할 L0 메뉴들 (쉼표구분). 미설정 = GNB 전체 메뉴
       SAMSUNG_MENU            (하위호환) 단일 메뉴 이름. 기본 "Mobile"
       SAMSUNG_CATEGORIES      L1 카테고리 이름 필터 (예 "Galaxy Watch,Galaxy Tab")
@@ -286,24 +296,72 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
 
 
 ================================================================================
- D.  생성물 / 캐시 파일
+ D.  다중 사이트  (samsung.com/us · /ca · /ca_fr)
 ================================================================================
-  scrape_YYYYMMDDHHmm.json         원본 스크랩 레코드 배열
-  scrape_YYYYMMDDHHmm.dedup.json   제품 레벨 dedup 결과 + ambiguities
-  result_YYYYMMDDHHmm.xlsx         최종 검증 리포트
-  verify_result.json              verify.py 단독 실행 결과
-  scope_test_result.json          scope_test.py 결과
-  progress.json                   진행 상황(실시간 갱신)
-  pf_cache/                        PF 단위 체크포인트 (이어하기용)
-  <원본>.filtered.xlsx             drop_hidden_products.py 기본 출력
-  <원본>.bak.xlsx                  drop_hidden_products.py --in-place 백업
+같은 파이프라인을 미국(us) / 캐나다 영어(ca) / 캐나다 프랑스어(ca_fr) 에 쓴다.
+사이트는 URL 경로 프리픽스 그대로다: https://www.samsung.com/<site>/
 
-  ※ .gitignore 에 *.xlsx, scrape_*.json, result_*.xlsx, pf_cache/, progress.json
+실행
+      python run_scope_test.py structured-us.xlsx    --site us    --fresh
+      python run_scope_test.py structured-ca.xlsx    --site ca    --fresh
+      python run_scope_test.py structured-ca-fr.xlsx --site ca_fr --fresh
+
+  스크래퍼 단독으로 돌릴 땐 환경변수:
+      SAMSUNG_SITE=ca    python verify_samsung_smartphones.py > scrape.json
+      SAMSUNG_SITE=ca_fr python verify_samsung_smartphones.py > scrape.json
+
+사이트별로 분리 저장되는 것 (서로 안 덮어씀)
+      scrape_<site>_YYYYMMDDHHmm.json  /  .dedup.json
+      result_<site>_YYYYMMDDHHmm.xlsx
+      pf_cache_<site>/                 (이어하기 체크포인트)
+      progress_<site>.json
+
+자동으로 흡수하는 us↔ca 차이 (별도 설정 불필요)
+      - URL 프리픽스(/us/ → /ca/ → /ca_fr/) 와 통화(USD → CAD)
+      - 정렬: CA 는 정렬 옵션이 label 이 아니라 radio(input#newest) 라서
+        코드(newest/recommended)로 클릭. ca_fr 는 정렬/메뉴 라벨이 프랑스어
+        ("Les plus récents" 등)라도 sort_type 은 항상 "Recommended"/"Newest" 로 기록
+      - 가격 표기: us "From $1,799.99 or $75/mo", ca "Total Price: From $39.58/mo
+        ... or $949.99"(월납 선행), ca_fr "Prix total: 949,99 $"(콤마 소수점·접미 $)
+        → 모두 실제 최종가로 파싱. "Save $X"/"Économisez X $"/"-X $" 도 처리
+      - CA 카드 마크업: Buy 링크가 a.js-pfv2-buy-now(href=javascript:;, 경로는
+        data-config_info), 색상칩에 data-chip-value 없음(an-la="color:..." 에서 추출)
+      - 메뉴 라벨의 NEW / NOUVEAU / NOUVEAUTÉ 꼬리표 제거
+      - 불어(é 등) 콘솔 출력 인코딩
+
+메뉴/카테고리 필터 주의 (ca_fr)
+      GNB L0 메뉴명이 프랑스어다(Mobilité, Appareils connectés, Électroménager…).
+      --menu / --menus / SAMSUNG_MENUS 는 표시 라벨과 정확히 일치해야 하므로
+      ca_fr 에선 필터 없이(전체) 돌리는 걸 권장.
+      --categories / SAMSUNG_CATEGORIES 도 프랑스어 L1 이름을 넣어야 한다.
+      URL 슬러그(smartphones, watches, tablets …)는 세 사이트 모두 영어라
+      --from-data(실데이터 기반 카테고리 추출)와 sorting_no 비교 게이팅은 그대로 동작.
+
+알려진 한계
+      CA 카드는 data-feedback-param 이 비어 있어 display_category_major /
+      display_category_middle 를 카드에서 못 읽는다 → 이 두 필드는 volatile 로
+      분류돼 strict FAIL 로 집계되지 않는다. (핵심 필드 SKU/가격/이름/정렬은 정상)
+
+
+================================================================================
+ E.  생성물 / 캐시 파일
+================================================================================
+  scrape_<site>_YYYYMMDDHHmm.json        원본 스크랩 레코드 배열
+  scrape_<site>_YYYYMMDDHHmm.dedup.json  제품 레벨 dedup 결과 + ambiguities
+  result_<site>_YYYYMMDDHHmm.xlsx        최종 검증 리포트
+  verify_result.json                    verify.py 단독 실행 결과
+  scope_test_result.json                scope_test.py 결과
+  progress_<site>.json                  진행 상황(실시간 갱신)
+  pf_cache_<site>/                       PF 단위 체크포인트 (이어하기용)
+  <원본>.filtered.xlsx                   drop_hidden_products.py 기본 출력
+  <원본>.bak.xlsx                        drop_hidden_products.py --in-place 백업
+
+  ※ .gitignore 에 *.xlsx, scrape_*.json, result_*.xlsx, pf_cache*/, progress*.json
      등이 이미 등록돼 있어 커밋되지 않는다.
 
 
 ================================================================================
- E.  자주 겪는 문제
+ F.  자주 겪는 문제
 ================================================================================
   - 스크랩이 0건 / 카테고리가 계속 skip
       → 제품 파인더가 화면에 들어와야 카드를 렌더한다(lazy-load). 네트워크가
@@ -325,4 +383,12 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
   - 전체 실행이 너무 오래 걸림
       → run_scope_test.py --default-only 로 대표 조합만, 또는 --from-data /
         --categories 로 범위를 좁힌다. 중단해도 pf_cache 로 이어진다.
+
+  - ca / ca_fr 인데 "unique PF pages=0"
+      → --site 를 안 줬거나(기본 us) 잘못 줬다. --site ca / --site ca_fr 확인.
+        ca_fr 에서 --menu/--categories 를 영어로 줬으면 매칭 실패 → 빼고 전체 실행.
+
+  - ca_fr 실행 시 UnicodeEncodeError (é 등)
+      → 스크립트가 stdout 을 UTF-8 로 재설정하므로 최신 버전에선 안 난다.
+        직접 파이프로 받을 땐 PYTHONUTF8=1 를 붙이면 확실하다.
 ================================================================================

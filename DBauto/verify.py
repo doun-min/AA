@@ -34,8 +34,10 @@ FIELDS = [
     ("model_code", "EXACT", False),
     ("model_name", "EXACT", False),
     ("display_name", "EXACT", False),
-    ("display_category_major", "EXACT", False),
-    ("display_category_middle", "EXACT", False),
+    # 카테고리 표시명은 사이트 내비 vs DB, 로케일(ca_fr)에 따라 표기가 갈리고
+    # CA 카드엔 data-feedback-param 이 비어 스크랩이 안 되므로 volatile 로 둔다.
+    ("display_category_major", "EXACT", True),
+    ("display_category_middle", "EXACT", True),
     ("product_color", "EXACT", False),
     ("capacity", "EXACT", False),
     ("product_url", "EXACT", False),
@@ -55,17 +57,22 @@ FIELDS = [
 ]
 
 # sorting_no 는 "스크랩한 PF 의 제품 집합" 과 "DB product_order 의 type 집합" 이
-# 일치할 때만 의미가 있다. 아래 카테고리(=PF 가 곧 type)만 비교하고 나머지는 SKIP.
+# 일치할 때만 의미가 있다. 아래 PF(=PF 가 곧 type)만 비교하고 나머지는 SKIP.
 # (가전/TV/모니터/액세서리 등은 사이트가 여러 하위 PF 로 쪼개져 있어 순위 범위가
 #  DB 와 달라 -20 ~ -300 씩 어긋난다 → 로직상 비교 불가)
-SORTING_NO_CATEGORIES = {
-    "Galaxy Smartphones",
-    "Galaxy Tab",
-    "Galaxy Watch",
-    "Galaxy Book",
-    "Galaxy Buds",
-    "Galaxy Ring",
+# 카테고리 표시명은 로케일(ca_fr)에 따라 달라지므로 URL 슬러그로 판정한다
+# (슬러그는 ca_fr 에서도 영어 유지: /ca_fr/watches/all-watches).
+SORTING_NO_PF_SLUGS = {
+    "smartphones", "tablets", "watches", "computers", "audio-sound", "rings",
 }
+
+
+def _pf_slug(url):
+    """/us/smartphones/all-smartphones -> 'smartphones' ; /ca_fr/watches/... -> 'watches'."""
+    if not url:
+        return None
+    segs = [s for s in str(url).strip("/").split("/") if s]
+    return segs[1].lower() if len(segs) >= 2 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -129,6 +136,13 @@ def load_expected(path):
                 r.get("spec_value")
             )
 
+    def _spec(mc, *keys):  # spec_name 은 로케일마다 다름 (color/colour/couleur, storage/taille...)
+        d = spec_map.get(mc, {})
+        for k in keys:
+            if d.get(k) is not None:
+                return d.get(k)
+        return None
+
     all_mc = set(sr) | set(mp) | set(fam) | set(basics)
     expected = {}
     for mc in all_mc:
@@ -139,8 +153,11 @@ def load_expected(path):
             "display_name": g(sr, "product_name") or g(fam, "display_name") or g(basics, "display_name"),
             "display_category_major": g(sr, "display_category_major") or g(basics, "category_lv1"),
             "display_category_middle": g(sr, "display_category_middle") or g(basics, "category_lv2"),
-            "product_color": g(sr, "product_color") or g(color, "colors") or (spec_map.get(mc, {}).get("color")),
-            "capacity": spec_map.get(mc, {}).get("storage"),
+            "product_color": (
+                g(sr, "product_color") or g(color, "colors")
+                or _spec(mc, "color", "colour", "couleur")
+            ),
+            "capacity": _spec(mc, "storage", "taille", "capacity", "capacité", "stockage"),
             "product_url": g(basics, "product_url"),
             "cta_pd_url": g(basics, "cta_pd_url"),
             "image_url": g(sr, "img_url"),
@@ -190,7 +207,8 @@ def norm(field, v):
     if field == "capacity":
         return s.upper().replace(" ", "")
     if field in ("product_url", "cta_pd_url", "image_url"):
-        s = s.split("#", 1)[0].split("?", 1)[0]  # fragment / query 제거
+        s = s.split("#", 1)[0].split("?", 1)[0]      # fragment / query 제거
+        s = re.sub(r"^https?:", "", s)               # //host 와 https://host 동일 취급
         return s.rstrip("/").lower()
     if field in ("is_default", "on_sale"):
         return s.lower() in ("true", "y", "yes", "1")
@@ -214,16 +232,17 @@ def compare(field, rule, got, exp):
     return ("PASS" if g == e else "FAIL"), f"got={got!r} expected={exp!r}"
 
 
-def compare_sorting_no(sort_type, category, got, exp):
+def compare_sorting_no(sort_type, pf_url, got, exp):
     """sorting_no 전용 비교.
 
-      - 비교 대상 카테고리가 아니면 SKIP (범위 불일치)
+      - 비교 대상 PF 가 아니면 SKIP (범위 불일치)
       - got == exp                         -> PASS
       - Newest 에서 got - exp == 1          -> PASS
         (데이터 추출 시점 이후 신제품이 상단에 유입되면 기존 제품이 한 칸씩 밀림)
     """
-    if category not in SORTING_NO_CATEGORIES:
-        return "SKIP", f"sorting_no 비교 제외: '{category}' 는 PF 순위 범위가 DB type 범위와 다름"
+    slug = _pf_slug(pf_url)
+    if slug not in SORTING_NO_PF_SLUGS:
+        return "SKIP", f"sorting_no 비교 제외: PF '{slug}' 순위 범위가 DB type 범위와 다름"
     g, e = norm("sorting_no", got), norm("sorting_no", exp)
     if e is None:
         return "SKIP", f"expected 없음 (got={got!r})"
@@ -276,7 +295,7 @@ def build_report(records, expected, order_map):
                 for st, rec in sorted(by_sort.items()):
                     exp_no = order_map.get((str(mc), st.lower()))
                     res, detail = compare_sorting_no(
-                        st, rec.get("category"), rec.get("sorting_no"), exp_no
+                        st, rec.get("source_pf_url"), rec.get("sorting_no"), exp_no
                     )
                     rows.append({
                         "model_code": mc, "field": f"sorting_no[{st}]", "rule": rule,
