@@ -171,9 +171,11 @@
       --progress-file P     진행 상황 JSON 경로 (기본 <outdir>/progress.json)
       --outdir DIR          결과 저장 폴더 (기본: 현재 폴더)
 
-result_YYYYMMDDHHmm.xlsx 시트 구성
+result_<site>_YYYYMMDDHHmm.xlsx 시트 구성
       Summary      메타 + 집계 (PASS / FAIL / FAIL*(volatile) / SKIP / NOT_FOUND)
-      Detail       model_code × field 별 전체 판정
+      Matrix       한눈에 보는 결과표. 1행=필드명, A열=model_code, 나머지 셀=
+                   PASS/FAIL/SKIP/NOT_FOUND. 끝열 n_FAIL(내림차순 정렬).
+      Detail       model_code × field 별 raw 판정 (got/expected/detail 포함)
       Failures     result=FAIL 만
       NotFound     실데이터엔 있는데 스크랩에서 매칭 안 된 model_code
       Ambiguities  같은 (sku, sort_type)인데 PF에 따라 값이 다른 항목

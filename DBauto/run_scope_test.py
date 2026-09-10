@@ -88,12 +88,44 @@ def _s(v):
     return str(v)
 
 
+def _result_matrix(detail):
+    """Detail(long) -> 모델코드 × 필드 result 매트릭스.
+
+    1행: model_code | <필드명들...> | n_FAIL
+    2행~: A열 모델코드, 그 뒤 각 필드의 PASS/FAIL/SKIP/NOT_FOUND
+    """
+    try:
+        from verify import FIELDS
+        base = [f for f, _r, _v in FIELDS if f not in ("sorting_no", "model_code")]
+    except Exception:  # noqa: BLE001
+        base = []
+    seen = [c for c in dict.fromkeys(detail["field"].tolist()) if c != "model_code"]
+    ordered = (
+        [c for c in base if c in seen]
+        + [c for c in seen if c.startswith("sorting_no")]
+        + [c for c in seen if c not in base and not c.startswith("sorting_no")]
+    )
+    piv = (
+        detail.pivot_table(
+            index="model_code", columns="field", values="result", aggfunc="first"
+        )
+        .reindex(columns=ordered)
+        .reset_index()
+    )
+    piv["n_FAIL"] = (
+        detail[detail["result"] == "FAIL"].groupby("model_code").size()
+        .reindex(piv["model_code"]).fillna(0).astype(int).values
+    )
+    return piv.sort_values(["n_FAIL", "model_code"], ascending=[False, True])
+
+
 def write_report(path, summary, rows, meta, ambiguities, sku_mismatches=()):
     detail = pd.DataFrame(rows, columns=[
         "model_code", "field", "rule", "volatile", "result", "got", "expected", "detail",
     ])
     for col in ("got", "expected", "volatile"):
         detail[col] = detail[col].map(_s)
+    matrix = _result_matrix(detail)
     fails = detail[detail["result"] == "FAIL"]
     notfound = detail[detail["result"] == "NOT_FOUND"][["model_code", "expected"]].rename(
         columns={"expected": "display_name"}
@@ -119,6 +151,7 @@ def write_report(path, summary, rows, meta, ambiguities, sku_mismatches=()):
 
     with pd.ExcelWriter(path, engine="openpyxl") as xw:
         summ.to_excel(xw, sheet_name="Summary", index=False)
+        matrix.to_excel(xw, sheet_name="Matrix", index=False)
         detail.to_excel(xw, sheet_name="Detail", index=False)
         fails.to_excel(xw, sheet_name="Failures", index=False)
         notfound.to_excel(xw, sheet_name="NotFound", index=False)
