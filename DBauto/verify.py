@@ -111,18 +111,30 @@ SLUG_TO_MAJOR = {
 PACKAGE_CODES = {"F-4111BUNDLE1", "F-5B30BUNDLE", "F-9600BUNDLE"}
 # 어느 PF 에서 나왔든 모바일 액세서리인 model_code prefix (케이스/충전/배터리/버즈)
 _MOBILE_ACC_PREFIX = ("EF-", "EP-", "EI-", "ET-", "EB-", "GP-", "EO-", "EE-", "EJ-")
+# ca_fr 은 category_lv1 이 프랑스어 (Audio/Display/Television/Package/Mobile 은 동일)
+_MAJOR_FR = {
+    "Computers": "Ordinateurs", "PC": "Ordinateurs",
+    "Home Appliances": "Appareils électroménagers",
+    "Memory Storage": "Mémoire",
+}
 
 
 def _major_for(mc, pf_url):
     """model_code / PF URL 로부터 기대 display_category_major 유도. 못하면 None."""
     u = str(mc).upper()
+    site = _pf_site(pf_url)
     if u in PACKAGE_CODES:
-        return "Package"
-    if u.startswith(_MOBILE_ACC_PREFIX):
-        return "Mobile"
-    major = SLUG_TO_MAJOR.get(_pf_slug(pf_url))
-    if major == "Computers" and _pf_site(pf_url) == "us":
-        return "PC"
+        major = "Package"
+    elif u.startswith(_MOBILE_ACC_PREFIX):
+        major = "Mobile"
+    else:
+        major = SLUG_TO_MAJOR.get(_pf_slug(pf_url))
+    if major is None:
+        return None
+    if major == "Computers" and site == "us":
+        major = "PC"
+    if site == "ca_fr":
+        major = _MAJOR_FR.get(major, major)
     return major
 
 
