@@ -208,7 +208,11 @@ def main():
         try:
             from shop_price import enrich_prices
             enrich_prices(raw, args.site)
-            with open(scrape_path, "w", encoding="utf-8") as f:
+            # --scrape-json 재사용 시엔 원본을 덮어쓰지 않고 별도 파일로 저장
+            priced_path = scrape_path
+            if args.scrape_json:
+                priced_path = os.path.join(args.outdir, f"scrape_{tag}_{ts}.priced.json")
+            with open(priced_path, "w", encoding="utf-8") as f:
                 json.dump(raw, f, ensure_ascii=False, indent=2)
         except Exception as e:  # noqa: BLE001 - 보강 실패해도 검증은 진행
             print(f"[2.5] 가격 API 보강 실패(무시): {type(e).__name__}: {e}", file=sys.stderr)
