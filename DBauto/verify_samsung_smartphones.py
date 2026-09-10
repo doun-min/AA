@@ -381,22 +381,32 @@ def _strip_buy_url(href):
 
 
 def _promo_url(href):
-    """구매/버라이언트 경로를 잘라 홍보용(promo) URL 로 정규화. .../galaxy-s26-fe/buy/... -> .../galaxy-s26-fe/"""
+    """카드 링크를 DB product_url 형태로 정규화.
+      .../galaxy-s26-fe/buy/...                         -> .../galaxy-s26-fe/
+      .../where-to-buy/<slug>-sku-<code>/<code path>/   -> .../<slug>-sku-<code>/
+    비구매 variant 의 learn-more 는 /where-to-buy/ 를 거치고 뒤에 모델코드 경로가
+    덧붙는데, DB 는 '...-sku-<code>' 에서 끝난다.
+    """
     href = _drop_frag(href)
     if not href:
         return None
+    href = href.replace("/where-to-buy/", "/")
+    # '-sku-<code>' 이후 꼬리(모델코드 경로 등) 제거
+    href = re.sub(r"(-sku-[a-z0-9-]+)(/[a-z0-9/._-]*)?/?$", r"\1/", href)
     href = re.sub(r"/buy(/.*)?$", "/", href)
     if not href.endswith("/"):
         href += "/"
     return href
 
 
-def extract_card_base(card):
-    """색상/용량과 무관한 카드 공통 정보."""
-    product_id = card.get_attribute("data-productidx")
+def _variant_fields(card):
+    """선택된 색상/용량(variant)에 따라 바뀌는 카드 필드.
+
+    이 값들은 칩을 클릭하면 카드 DOM 이 갱신되므로 variant 마다 다시 읽어야 한다
+    (기존엔 카드 기본값을 모든 조합에 복사해 EW/HW 같은 형제 variant 가
+     엉뚱한 URL·이름·이미지를 갖는 버그가 있었음).
+    """
     cb = first_or_none(card, "input.pd21-product-card__compare-checkbox")
-    if product_id is None and cb:
-        product_id = cb.get_attribute("data-productidx")
 
     # 파란 "New" 배지뿐 아니라 프로모션 배지("Labor Day", "BUY MORE, SAVE MORE" 등)도 읽는다
     badge_el = first_or_none(
@@ -470,8 +480,13 @@ def extract_card_base(card):
 
     fp = _feedback_params(card)
 
+    # 비구매(where-to-buy) variant 는 Buy 링크가 없다. DB 는 이 경우
+    # cta_pd_url == product_url (PDP 경로) 이므로 그걸로 대체한다.
+    cta_pd_url = _strip_buy_url(buy_url)
+    if not cta_pd_url and product_url and "-sku-" in product_url:
+        cta_pd_url = product_url
+
     return {
-        "product_id": product_id,
         "model_name": model_name,
         "name": name_text,
         "display_name": fp.get("pn") or name_text,
@@ -483,7 +498,7 @@ def extract_card_base(card):
         "image_url": image_url,
         "rep_image_url": rep_image_url,
         "product_url": product_url,
-        "cta_pd_url": _strip_buy_url(buy_url),
+        "cta_pd_url": cta_pd_url,
         "buy_url": buy_url,
         "family_id": family_id,
         "is_multi_group": is_multi_group,
@@ -492,6 +507,17 @@ def extract_card_base(card):
         "feedback_model_code": fp.get("pi"),
         "feedback_rank": int(fp["pr"]) if str(fp.get("pr", "")).isdigit() else None,
     }
+
+
+def extract_card_base(card):
+    """카드 불변 정보(product_id) + 기본 선택 variant 필드."""
+    product_id = card.get_attribute("data-productidx")
+    cb = first_or_none(card, "input.pd21-product-card__compare-checkbox")
+    if product_id is None and cb:
+        product_id = cb.get_attribute("data-productidx")
+    base = {"product_id": product_id}
+    base.update(_variant_fields(card))
+    return base
 
 
 def _checked_chip_value(card, wrap_class):
@@ -827,8 +853,19 @@ def _variant_record(
     page, card, base, sort_type, sorting_no, color_name, capacity, is_default,
     prev_code=None,
 ):
-    prices = read_prices(card)
     rec = dict(base)
+    sku = src = None
+    mism = None
+    try:
+        sku, src, mism = read_variant_sku(page, card, prev_code)
+    except Exception as e:  # noqa: BLE001 - 조합 하나 실패해도 계속 진행
+        rec["error"] = f"{type(e).__name__}: {e}"
+        _close_quick_view(page)
+
+    # read_variant_sku 가 DOM 이 새 variant 로 갱신되길 기다렸으므로,
+    # 이 시점에서 카드 필드(URL/이름/이미지/배지 등)를 다시 읽는다.
+    rec.update(_variant_fields(card))
+
     modelcode = read_card_modelcode(card)
     rec.update(
         {
@@ -842,19 +879,13 @@ def _variant_record(
             "model_code": modelcode,
             "stock_level_status": read_stock_status(card),
             "price_save": read_price_save(card),  # 하위호환
-            "sku": None,
+            "sku": sku,
+            "sku_source": src,
         }
     )
-    rec.update(prices)
-    try:
-        sku, src, mism = read_variant_sku(page, card, prev_code)
-        rec["sku"] = sku
-        rec["sku_source"] = src
-        if mism:
-            rec["sku_audit_mismatch"] = mism
-    except Exception as e:  # noqa: BLE001 - 조합 하나 실패해도 계속 진행
-        rec["error"] = f"{type(e).__name__}: {e}"
-        _close_quick_view(page)
+    rec.update(read_prices(card))
+    if mism:
+        rec["sku_audit_mismatch"] = mism
     return rec
 
 
@@ -913,6 +944,12 @@ def extract_all(page, sort_type, progress=None):
     """현재 정렬 상태에서 활성 카드 전체를 순회."""
     page.wait_for_selector(CARD_SELECTOR, timeout=30000)
     page.wait_for_timeout(1200)
+
+    # 무한 스크롤 PF 는 첫 배치만 렌더되므로 끝까지 스크롤해 모두 로드한다.
+    # (정렬을 바꾸면 그리드가 처음부터 다시 그려지므로 sort 마다 호출)
+    load_all_cards(page)
+    page.evaluate("window.scrollTo(0, 0)")
+    page.wait_for_timeout(400)
 
     cards = page.locator(CARD_SELECTOR)
     total = cards.count()
@@ -1186,6 +1223,53 @@ def wait_for_pf(page, timeout_ms=15000):
             return True
         page.wait_for_timeout(2000)
     return page.locator(CARD_SELECTOR).count() > 0
+
+
+def _pf_result_count(page):
+    """PF 상단 'N Results' 숫자. 못 읽으면 None."""
+    el = first_or_none(page, ".pd21-top__result-count")
+    if not el:
+        return None
+    n = _to_number(el.inner_text())
+    return int(n) if n is not None and n > 0 else None
+
+
+def load_all_cards(page, max_iter=80, settle=3):
+    """무한 스크롤 PF: 활성 카드 수가 더 이상 안 늘거나(연속 settle회) result-count 에
+    도달할 때까지 페이지 끝으로 스크롤해 카드를 모두 로드한다.
+    MAX_CARDS 가 걸려 있으면 그만큼만 채우고 멈춘다.
+    반환: 최종 활성 카드 수.
+    """
+    target = _pf_result_count(page)
+    cap = MAX_CARDS or target or 100000
+
+    prev, stable = -1, 0
+    for _ in range(max_iter):
+        n = page.locator(CARD_SELECTOR).count()
+        if n >= cap:
+            break
+        if n == prev:
+            stable += 1
+            if stable >= settle:
+                break
+        else:
+            stable = 0
+        prev = n
+        try:
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        except Exception:  # noqa: BLE001
+            page.mouse.wheel(0, 6000)
+        page.wait_for_timeout(1100)
+        page.mouse.wheel(0, -400)  # 살짝 위로 튕겨 IntersectionObserver 재트리거
+        page.wait_for_timeout(250)
+
+    n = page.locator(CARD_SELECTOR).count()
+    if target and n < target and not MAX_CARDS:
+        print(
+            f"[warn] load_all_cards: {n}/{target} 만 로드됨 ({page.url})",
+            file=sys.stderr,
+        )
+    return n
 
 
 # --------------------------------------------------------------------------- #

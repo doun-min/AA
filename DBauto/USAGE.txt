@@ -368,6 +368,13 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
         느리면 wait_for_pf 폴링(~30초) 안에 안 뜰 수 있음. 재실행하면 pf_cache
         덕에 성공한 PF 는 건너뛴다.
 
+  - 카드 많은 PF(액세서리 등)에서 제품 일부만 잡힘 / NOT_FOUND 대량
+      → PF 그리드는 무한 스크롤이라 첫 배치(~20개)만 렌더된다. extract_all 이
+        정렬마다 load_all_cards() 로 상단 "N Results" 수 또는 증가가 멈출 때까지
+        끝으로 스크롤해 전부 로드한다(액세서리 PF 하나당 +30~60초).
+        stderr 에 "[warn] load_all_cards: n/target 만 로드됨" 이 뜨면 그 PF 는
+        스크롤이 target 에 못 미친 것 → 재실행하거나 max_iter 를 늘린다.
+
   - "Element is outside of the viewport" 류로 조합 일부 실패
       → 스와이퍼 캐러셀에 가린 칩. JS 클릭으로 폴백하지만 그래도 실패하면 해당
         레코드에 error 필드가 남고 나머지는 계속 진행된다.
