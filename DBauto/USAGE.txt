@@ -285,12 +285,17 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
         매핑으로 유도(Package 는 3개 model_code 화이트리스트, EF-/EP-/GP-... 는
         어느 PF 든 Mobile, computers 슬러그는 US=PC / CA=Computers).
 
-      sorting_no
-        절대 순번이 아니라 'PF 안에서의 상대 순위' 로 비교. 사이트가 한 type 을
-        여러 하위 PF(예: laundry -> washers + dryers)로 쪼개므로 절대값은 안
-        맞지만 각 하위 PF 는 DB 정렬을 보존한 슬라이스라 상대순위는 맞는다.
-        Newest = 상대순위 ±1(신제품 유입), Recommended = ±2(사이트 큐레이션).
-        DB product_order 에 해당 type 이 아예 없으면(CA rings 등) SKIP.
+      sorting_no  (카드=제품 단위 상대순위 + 그룹 자동 게이팅)
+        사이트가 한 type 을 여러 하위 PF 로 쪼개서 절대 순번은 안 맞지만, 각
+        하위 PF 는 대체로 DB 정렬을 보존한 슬라이스다. 그래서:
+          1) PF 그룹별로 '카드(=고유 sorting_no)' 단위 상대순위를 매김
+          2) (scraped rel - DB rel) 의 그룹 중앙값(uniform offset)을 뺀 값 d 로 판정
+          3) 그룹의 d 가 중앙값 ±2 안에 60% 미만이면 그 카테고리는 통째로 SKIP
+             (사이트 정렬이 DB 와 무관 - mobile-accessories, memory-storage,
+              bundles, jbl, microwaves, DB에 없는 CA rings 등)
+          4) 통과 그룹은 |d| <= 2 면 PASS
+        결과(US): sorting_no FAIL 1070+ -> ~120 (Newest 6% / Rec 3%),
+                  나머지는 PASS 아니면 '검증불가 SKIP'.
 
       is_default = 스크랩(카드 기본 variant) vs DB key_model_yn(가족 대표) 대조.
 

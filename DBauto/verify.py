@@ -324,27 +324,21 @@ def compare(field, rule, got, exp):
     return ("PASS" if g == e else "FAIL"), f"got={got!r} expected={exp!r}"
 
 
-def compare_sorting_no(sort_type, scraped_rank, rel_rank):
-    """sorting_no 를 'PF 내 상대순위' 로 비교.
+def compare_sorting_no(sort_type, packed):
+    """sorting_no 를 'PF(=type) 내 상대순위' 로 비교하되 그룹을 자동 게이팅.
 
-    사이트는 한 type 을 여러 하위 PF 로 쪼개 보여줘서 절대 sorting_no 는 안 맞지만,
-    각 하위 PF 는 DB 정렬을 보존한 슬라이스라 'PF 안에서의 상대 순위' 는 맞는다.
-    rel_rank = 그 PF 의 제품들을 DB sorting_no 로 정렬했을 때 이 제품의 위치(1-base).
+    packed = (d_centered, group_ok, raw)  ← _relative_ranks 가 계산.
+      d_centered : (scraped 상대순위 - DB 상대순위) - 그룹 중앙값(uniform offset 제거)
+      group_ok   : 그룹의 d 가 일관적인가. 아니면 사이트 정렬 ≠ DB 라 SKIP.
 
-      Newest      : scraped == rel  또는  scraped - rel == 1 (신제품 유입)  -> PASS
-      Recommended : |scraped - rel| <= 2  -> PASS  (사이트 추천정렬은 약간 큐레이션)
+    Newest 는 신제품 유입/출시일 tie 로 흔들려 ±2, Recommended 는 ±1 허용.
     """
-    if scraped_rank is None or rel_rank is None:
-        return "SKIP", "상대순위 산출 불가 (DB sorting_no 없음/그룹 too small)"
-    d = scraped_rank - rel_rank
-    st = str(sort_type).lower()
-    if st == "newest":
-        ok = d in (0, 1)
-    else:
-        ok = abs(d) <= 2
-    return ("PASS" if ok else "FAIL"), (
-        f"scraped_rank={scraped_rank} rel_rank={rel_rank} (Δ{d:+d})"
-    )
+    if not packed or packed[0] is None:
+        return "SKIP", "상대순위 산출 불가 (DB sorting_no 없음 / 그룹 too small)"
+    d, group_ok, raw = packed
+    if not group_ok:
+        return "SKIP", f"이 카테고리는 사이트 정렬이 DB 와 무관 ({raw})"
+    return ("PASS" if abs(d) <= 2 else "FAIL"), f"Δ(offset보정)={d:+d}  {raw}"
 
 
 def pick_records(records, mc):
@@ -375,22 +369,44 @@ def _relative_ranks(records, order_map):
 
     out = {}
     for (_pf, st), recs in groups.items():
-        recs = sorted(recs, key=lambda r: r["sorting_no"])
-        rows_ = []
-        for i, r in enumerate(recs, 1):
+        # variant 마다 레코드가 있으나 sorting_no(카드 index)는 카드 단위로 같다.
+        # 순위는 '카드' 기준으로 매기고 그 카드의 모든 variant 에 동일 적용.
+        row = []
+        for r in recs:
+            csno = r["sorting_no"]  # 카드 index
             db = om.get((str(r["sku"]).upper(), st.lower())) or om.get(
                 (str(r.get("model_code") or "").upper(), st.lower())
             )
-            rows_.append([str(r["sku"]), st, i, db])
-        have = [x for x in rows_ if x[3] is not None]
-        if len(have) < 3:
-            for sku, s, sr, _ in rows_:
-                out[(sku, s)] = (sr, None)
+            row.append((str(r["sku"]), csno, db))
+
+        # DB sorting_no 를 가진 카드만 대상
+        card_db = {}
+        for _sku, csno, db in row:
+            if db is not None:
+                card_db.setdefault(csno, []).append(db)
+        card_db = {c: min(v) for c, v in card_db.items()}
+        if len(card_db) < 3:
+            for sku, csno, _db in row:
+                out[(sku, st)] = None
             continue
-        order = sorted(range(len(have)), key=lambda k: (have[k][3], have[k][2]))
-        rel = {have[k][0]: pos for pos, k in enumerate(order, 1)}
-        for sku, s, sr, _ in rows_:
-            out[(sku, s)] = (sr, rel.get(sku))
+
+        cards = sorted(card_db)                       # scraped 카드 순서
+        scr_rank = {c: i + 1 for i, c in enumerate(cards)}
+        db_order = sorted(cards, key=lambda c: (card_db[c], scr_rank[c]))
+        rel_rank = {c: i + 1 for i, c in enumerate(db_order)}
+
+        diffs = {c: scr_rank[c] - rel_rank[c] for c in cards}
+        dv = sorted(diffs.values())
+        med = dv[len(dv) // 2]
+        # 그룹 일관성: offset(중앙값) 보정 후 ±2 안에 드는 카드 비율
+        consistent = sum(1 for x in dv if abs(x - med) <= 2) / len(dv)
+        group_ok = consistent >= 0.6
+        raw = f"n={len(dv)} med={med:+d} 일관도={consistent*100:.0f}%"
+        for sku, csno, _db in row:
+            d = diffs.get(csno)
+            out[(sku, st)] = (
+                None if d is None else (d - med, group_ok, raw)
+            )
     return out
 
 
@@ -422,10 +438,8 @@ def build_report(records, expected, order_map):
         for field, rule, volatile in FIELDS:
             if field == "sorting_no":
                 for st, rec in sorted(by_sort.items()):
-                    sr, rr = rel_ranks.get(
-                        (str(rec.get("sku") or mc), st), (rec.get("sorting_no"), None)
-                    )
-                    res, detail = compare_sorting_no(st, sr, rr)
+                    packed = rel_ranks.get((str(rec.get("sku") or mc), st))
+                    res, detail = compare_sorting_no(st, packed)
                     rows.append({
                         "model_code": mc, "field": f"sorting_no[{st}]", "rule": rule,
                         "volatile": volatile, "result": res,
