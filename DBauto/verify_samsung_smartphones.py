@@ -425,7 +425,8 @@ def _variant_fields(card):
     rep_image_url = cb.get_attribute("data-img-src") if cb else None
 
     name_el = first_or_none(card, "div.pd21-product-card__name-wrap")
-    name_text = name_el.inner_text().strip() if name_el else None
+    # CA 카드는 inner_text 에 \n\n 이 섞여 나오므로 공백 1칸으로 정규화
+    name_text = " ".join(name_el.inner_text().split()) if name_el else None
 
     link_el = first_or_none(
         card, "a.pd21-product-card__image-cta, a.pd21-product-card__name"
@@ -462,6 +463,9 @@ def _variant_fields(card):
             or buy_el.get_attribute("data-link_info")
             or None
         )
+    # CA 담기 버튼은 일반 장바구니 URL(shop.samsung.com/.../cart) 이라 PDP 가 아님
+    if buy_url and re.search(r"shop\.samsung\.com|/cart(\b|$|[/?#])", buy_url, re.I):
+        buy_url = None
 
     family_id = None
     is_multi_group = False
@@ -480,16 +484,18 @@ def _variant_fields(card):
 
     fp = _feedback_params(card)
 
-    # 비구매(where-to-buy) variant 는 Buy 링크가 없다. DB 는 이 경우
-    # cta_pd_url == product_url (PDP 경로) 이므로 그걸로 대체한다.
+    # Buy 링크가 없는 경우(US where-to-buy variant, CA 담기전용 카드) DB 는
+    # cta_pd_url == product_url (PDP 경로) 이므로 product_url 로 대체한다.
     cta_pd_url = _strip_buy_url(buy_url)
-    if not cta_pd_url and product_url and "-sku-" in product_url:
+    if not cta_pd_url and product_url and product_url.startswith("/"):
         cta_pd_url = product_url
+
+    display_name = " ".join((fp.get("pn") or name_text or "").split()) or None
 
     return {
         "model_name": model_name,
         "name": name_text,
-        "display_name": fp.get("pn") or name_text,
+        "display_name": display_name,
         "display_category_major": fp.get("dc"),
         "display_category_middle": fp.get("sc"),
         "sub_family": fp.get("dg"),
@@ -550,6 +556,17 @@ def _max_save(card):
     return max(saves) if saves else None
 
 
+def _card_list_price(card):
+    """CA 카드의 담기/구매 버튼 data-price = 정가(list). 현재가 문자열엔 프로모가만
+    보이는 경우가 많아 이걸로 standard_price 를 보정한다."""
+    el = first_or_none(
+        card,
+        "div.pd21-product-card__cta [data-price], "
+        "div.pd21-product-card__cta-wrap [data-price]",
+    )
+    return _to_number(el.get_attribute("data-price")) if el else None
+
+
 def read_prices(card):
     """standard_price / final_price / currency / on_sale / 할인액 / 월 납부.
 
@@ -557,6 +574,8 @@ def read_prices(card):
       - 카드에 'Save $X'(price-save) 표기가 있으면
             final_price = standard_price - max(Save $X)   ← 최대 할인 적용
       - 표기가 없으면 final_price = standard_price (= 현재가)
+    CA 는 취소선(정가)을 안 보여주고 현재가에 프로모가만 나오므로,
+    담기 버튼의 data-price(정가)가 있으면 그걸 standard_price 로 쓴다.
     """
     out = {
         "standard_price": None,
@@ -574,7 +593,7 @@ def read_prices(card):
     cur = first_or_none(card, "div.price-ux__wrap .price-ux__price-current")
 
     cur_info = parse_price_current(cur.inner_text()) if cur else {}
-    current_price = cur_info.get("final_price")  # 월납이 아닌 실제 현재가
+    current_price = cur_info.get("final_price")  # 월납이 아닌 실제 현재가(=CA 프로모가)
     out["currency"] = cur_info.get("currency")
     out["monthly_price"] = cur_info.get("monthly_price")
     out["monthly_months"] = cur_info.get("monthly_months")
@@ -585,26 +604,42 @@ def read_prices(card):
         if out["currency"] is None and ps and ps.get("currency"):
             out["currency"] = ps["currency"]
 
+    list_price = _card_list_price(card)
+    if list_price is not None and (
+        out["standard_price"] is None or list_price >= out["standard_price"]
+    ):
+        out["standard_price"] = list_price
+
     # 통화 기호($)만으로는 USD/CAD 구분이 안 되므로 사이트 기준으로 확정
     if out["currency"] in (None, "$"):
         out["currency"] = SITE_CURRENCY
 
     save = _max_save(card)
-    if save is not None:
-        out["on_sale"] = True
-        out["discount_amount"] = save
 
     # 기준가가 없으면 현재가를 기준가로 사용
     if out["standard_price"] is None:
         out["standard_price"] = current_price
 
-    # 최종가 = 할인 표기가 있으면 기준가 - 최대할인액, 없으면 기준가
+    # 최종가: Save 표기 있으면 기준가-할인, 아니면 현재가, 그것도 없으면 기준가
     if out["standard_price"] is not None and save is not None:
         out["final_price"] = round(out["standard_price"] - save, 2)
-    elif out["standard_price"] is not None:
-        out["final_price"] = out["standard_price"]
-    else:
+    elif current_price is not None:
         out["final_price"] = current_price
+    else:
+        out["final_price"] = out["standard_price"]
+
+    # on_sale: 명시적 Save 표기가 있거나, 기준가 > 최종가면 세일 중
+    if save is not None:
+        out["on_sale"] = True
+        out["discount_amount"] = save
+    elif (
+        out["standard_price"] is not None
+        and out["final_price"] is not None
+        and out["final_price"] < out["standard_price"]
+    ):
+        out["on_sale"] = True
+        out["discount_amount"] = round(out["standard_price"] - out["final_price"], 2)
+
     return out
 
 

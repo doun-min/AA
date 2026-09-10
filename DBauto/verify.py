@@ -42,7 +42,9 @@ FIELDS = [
     ("capacity", "EXACT", False),
     ("product_url", "EXACT", False),
     ("cta_pd_url", "EXACT", False),
-    ("image_url", "EXACT", False),
+    # 이미지 자산 id/변형(gallery vs thumb)이 자주 바뀌고, CA 카드는 thumb URL 만
+    # 노출해 DB(gallery)와 파일명이 달라 완전일치가 어렵다 -> volatile.
+    ("image_url", "EXACT", True),
     ("family_id", "EXACT", False),
     ("badge", "EXACT", True),  # 프로모션성 배지(Labor Day 등)라 시점 따라 바뀜
     ("standard_price", "EXACT", False),
@@ -205,6 +207,11 @@ def norm(field, v):
         m = re.search(r"\d+", s)
         return int(m.group(0)) if m else None
     if field == "capacity":
+        # '256 GB' vs '256GB (1GB=1Billion byte)* ...' 처럼 뒤에 법적 문구가 붙는다.
+        # 용량 토큰만 뽑아 비교.
+        m = re.search(r"(\d[\d,]*)\s*(GB|TB)", s, re.I)
+        if m:
+            return m.group(1).replace(",", "") + m.group(2).upper()
         return s.upper().replace(" ", "")
     if field in ("product_url", "cta_pd_url", "image_url"):
         s = s.split("#", 1)[0].split("?", 1)[0]      # fragment / query 제거
@@ -212,7 +219,7 @@ def norm(field, v):
         return s.rstrip("/").lower()
     if field in ("is_default", "on_sale"):
         return s.lower() in ("true", "y", "yes", "1")
-    return s.lower()
+    return " ".join(s.split()).lower()              # 내부 개행/연속 공백 정규화
 
 
 def compare(field, rule, got, exp):
