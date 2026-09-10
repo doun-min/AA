@@ -8,10 +8,11 @@ from urllib.parse import unquote
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
-# Windows 콘솔(cp949)에서도 불어(é 등) 출력이 깨지지 않도록
+# Windows 콘솔(cp949)에서도 불어(é 등) 출력이 깨지지 않도록 + 파일 리다이렉트 시에도
+# 진행 로그가 즉시 보이도록 라인버퍼링 강제(block-buffered 방지).
 for _stream in (sys.stdout, sys.stderr):
     try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+        _stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     except Exception:  # noqa: BLE001
         pass
 
