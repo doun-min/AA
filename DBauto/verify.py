@@ -42,9 +42,8 @@ FIELDS = [
     ("capacity", "EXACT", False),
     ("product_url", "EXACT", False),
     ("cta_pd_url", "EXACT", False),
-    # 이미지 자산 id/변형(gallery vs thumb)이 자주 바뀌고, CA 카드는 thumb URL 만
-    # 노출해 DB(gallery)와 파일명이 달라 완전일치가 어렵다 -> volatile.
-    ("image_url", "EXACT", True),
+    # norm() 이 -thumb-/자산id 변동분을 떼고 안정 slug 만 비교하므로 EXACT 로 검증.
+    ("image_url", "EXACT", False),
     ("family_id", "EXACT", False),
     ("badge", "EXACT", True),  # 프로모션성 배지(Labor Day 등)라 시점 따라 바뀜
     ("standard_price", "EXACT", False),
@@ -216,7 +215,14 @@ def norm(field, v):
     if field in ("product_url", "cta_pd_url", "image_url"):
         s = s.split("#", 1)[0].split("?", 1)[0]      # fragment / query 제거
         s = re.sub(r"^https?:", "", s)               # //host 와 https://host 동일 취급
-        return s.rstrip("/").lower()
+        s = s.rstrip("/").lower()
+        if field == "image_url":
+            # gallery 이미지 URL: PF 카드는 '-thumb-<id>?$Q90...' 썸네일,
+            # DB 는 '-<id>?$PD_GALLERY_PNG$' 원본. '-thumb-' 마커와 끝 자산 id(6자리+)
+            # 는 변동분이라 떼고 안정 slug(.../gallery/<slug>-<modelcode>)만 비교.
+            s = re.sub(r"-thumb-\d+$", "", s)
+            s = re.sub(r"-\d{6,}$", "", s)
+        return s
     if field in ("is_default", "on_sale"):
         return s.lower() in ("true", "y", "yes", "1")
     return " ".join(s.split()).lower()              # 내부 개행/연속 공백 정규화

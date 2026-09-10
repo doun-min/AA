@@ -3,6 +3,7 @@ __pycache__/
 
 # 검증 입력/출력/중간 산출물
 *.xlsx
+*.jsonl
 scope_test_result.json
 verify_result.json
 scrape_*.json

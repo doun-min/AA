@@ -337,6 +337,11 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
       URL 슬러그(smartphones, watches, tablets …)는 세 사이트 모두 영어라
       --from-data(실데이터 기반 카테고리 추출)와 sorting_no 비교 게이팅은 그대로 동작.
 
+img_url (CA / CA_FR)
+      PF 카드는 썸네일 URL(-thumb-<id>...$Q90_330...)만, DB 는 원본
+      (-<id>...$PD_GALLERY_PNG$). verify.norm() 이 '-thumb-' 마커와 끝 자산 id 를
+      떼고 .../gallery/<slug>-<modelcode> 안정부만 비교 -> 99% 일치. PDP 방문 불필요.
+
 알려진 한계
       CA 카드는 data-feedback-param 이 비어 있어 display_category_major /
       display_category_middle 를 카드에서 못 읽는다 → 이 두 필드는 volatile 로
