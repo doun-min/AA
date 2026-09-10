@@ -317,6 +317,7 @@ def build_report(records, expected, order_map):
                     })
                     _tally(tally, res, volatile)
                 continue
+            got_val = ref.get(field)
             if field == "is_default" and all_default:
                 res, detail = "SKIP", "is_default 비교 제외: --default-only 스크랩이라 전부 True"
             elif field == "family_id" and (
@@ -327,11 +328,19 @@ def build_report(records, expected, order_map):
                     "family_id 비교 제외: MULTI_GROUP(멀티그룹) 상품은 카드 group-id 가 "
                     "DB family_id 와 다른 체계"
                 )
+            elif field == "cta_pd_url" and (
+                not got_val
+                or re.search(r"shop\.samsung\.com|/cart(/|$|\?|#)", str(got_val), re.I)
+            ):
+                # CA/CA_FR 담기전용 카드는 PDP 링크가 없어 장바구니 URL 이 잡힌다.
+                # DB 는 cta_pd_url == product_url 이므로 product_url 로 대조.
+                got_val = ref.get("product_url")
+                res, detail = compare(field, rule, got_val, exp.get(field))
             else:
-                res, detail = compare(field, rule, ref.get(field), exp.get(field))
+                res, detail = compare(field, rule, got_val, exp.get(field))
             rows.append({
                 "model_code": mc, "field": field, "rule": rule, "volatile": volatile,
-                "result": res, "got": ref.get(field), "expected": exp.get(field),
+                "result": res, "got": got_val, "expected": exp.get(field),
                 "detail": detail,
             })
             _tally(tally, res, volatile)
