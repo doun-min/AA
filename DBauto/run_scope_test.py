@@ -144,6 +144,8 @@ def main():
     ap.add_argument("--fresh", action="store_true", help="체크포인트 비우고 처음부터")
     ap.add_argument("--progress-file", help="진행 상황 JSON 경로")
     ap.add_argument("--outdir", default=".")
+    ap.add_argument("--no-price-api", action="store_true",
+                    help="커머스 API 로 가격 보강하는 단계를 건너뜀")
     args = ap.parse_args()
 
     if not os.path.exists(args.expected):
@@ -200,6 +202,16 @@ def main():
         with open(scrape_path, "w", encoding="utf-8") as f:
             json.dump(raw, f, ensure_ascii=False, indent=2)
         print(f"[2/4] scrape saved -> {scrape_path} ({len(raw)} records)", file=sys.stderr)
+
+    # 2.5) 커머스 API 로 standard/final/currency 정밀 보강 (PF 카드는 프로모가만 노출)
+    if not args.no_price_api:
+        try:
+            from shop_price import enrich_prices
+            enrich_prices(raw, args.site)
+            with open(scrape_path, "w", encoding="utf-8") as f:
+                json.dump(raw, f, ensure_ascii=False, indent=2)
+        except Exception as e:  # noqa: BLE001 - 보강 실패해도 검증은 진행
+            print(f"[2.5] 가격 API 보강 실패(무시): {type(e).__name__}: {e}", file=sys.stderr)
 
     # 3) 제품 레벨 dedup + 비교
     records, ambiguities = scraper.dedupe_records(raw)
