@@ -268,11 +268,29 @@ CLI 인자는 없다. 모든 조정은 환경변수로 한다.
 
 판정 규칙
       EXACT   값이 정확히 일치해야 PASS
-      TOL     ±10%(TOLERANCE_RATIO) 이내면 PASS
-              → review_count, review_rating_score (추출/검증 시점 차이 보정)
-      volatile 필드(final_price, on_sale, stock_level_status, sorting_no)는
-              시점에 따라 정상적으로도 바뀌므로 FAIL 시 "FAIL*" 로 분리 집계.
+      TOL     review_count/review_rating_score: ±20%(REVIEW_TOL_RATIO) 또는
+              절대 허용치(count ±25, rating ±0.3) 중 하나만 충족하면 PASS
+      volatile 필드(final_price, badge, stock_level_status, sorting_no, review_*)
+              는 시점에 따라 바뀌므로 FAIL 시 "FAIL*" 로 분리 집계.
       실데이터에 기대값이 없으면 SKIP, 스크랩에 값이 없으면 FAIL.
+
+      검증 제외(FIELDS 에서 뺌):
+        on_sale   - 사이트 무관. DB on_sale 은 '할인'이 아니라 '오퍼 존재' 의미
+        capacity  - model_code/sku 로 이미 식별되고 표기 편차만 큼
+
+      display_category_major
+        스크랩값(CA 카드는 비어있음)이 없으면 PF URL 슬러그 -> SLUG_TO_MAJOR
+        매핑으로 유도(Package 는 3개 model_code 화이트리스트, EF-/EP-/GP-... 는
+        어느 PF 든 Mobile, computers 슬러그는 US=PC / CA=Computers).
+
+      sorting_no
+        절대 순번이 아니라 'PF 안에서의 상대 순위' 로 비교. 사이트가 한 type 을
+        여러 하위 PF(예: laundry -> washers + dryers)로 쪼개므로 절대값은 안
+        맞지만 각 하위 PF 는 DB 정렬을 보존한 슬라이스라 상대순위는 맞는다.
+        Newest = 상대순위 ±1(신제품 유입), Recommended = ±2(사이트 큐레이션).
+        DB product_order 에 해당 type 이 아예 없으면(CA rings 등) SKIP.
+
+      is_default = 스크랩(카드 기본 variant) vs DB key_model_yn(가족 대표) 대조.
 
 
 ================================================================================

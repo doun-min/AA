@@ -2,10 +2,14 @@
 
 규칙:
   EXACT  - 값이 정확히 일치해야 PASS
-  TOL    - ±TOLERANCE_RATIO(10%) 이내면 PASS  (review_count, review_rating_score)
-           데이터 추출 시점과 검증 시점의 시간차 때문
-  일부 필드(final_price, on_sale, stock_level_status, sorting_no)는 시점에 따라
-  정상적으로도 바뀔 수 있어 volatile 로 표시하고 요약에서 분리 집계한다.
+  TOL    - review_count/review_rating_score: ±REVIEW_TOL_RATIO(20%) 또는
+           절대 허용치(count ±25, rating ±0.3) 중 하나만 충족하면 PASS
+  volatile - final_price, badge, stock_level_status, sorting_no, review_* 등
+             시점에 따라 정상적으로 바뀌는 필드. FAIL 을 요약에서 분리 집계.
+  검증 제외 - on_sale(사이트 무관), capacity(model_code 로 식별됨)
+  display_category_major - 스크랩값 없으면 PF URL 슬러그 -> SLUG_TO_MAJOR 로 유도
+  sorting_no - 절대 순번이 아니라 'PF 안에서의 상대 순위' 로 비교
+               (사이트가 한 type 을 여러 하위 PF 로 쪼개므로)
 
 CLI:
     python verify.py <scraped.json> <expected.xlsx>
@@ -16,6 +20,7 @@ CLI:
     build_report(records, expected, order_map) -> (rows, summary)
 """
 
+import collections
 import json
 import re
 import sys
@@ -36,10 +41,11 @@ FIELDS = [
     ("display_name", "EXACT", False),
     # 카테고리 표시명은 사이트 내비 vs DB, 로케일(ca_fr)에 따라 표기가 갈리고
     # CA 카드엔 data-feedback-param 이 비어 스크랩이 안 되므로 volatile 로 둔다.
+    # 스크랩값이 없으면 PF URL 슬러그 -> SLUG_TO_MAJOR 로 유도해 비교
     ("display_category_major", "EXACT", True),
     ("display_category_middle", "EXACT", True),
     ("product_color", "EXACT", False),
-    ("capacity", "EXACT", False),
+    # capacity: model_code/sku 로 이미 식별되므로 검증 제외 (표기 편차만 큼)
     ("product_url", "EXACT", False),
     ("cta_pd_url", "EXACT", False),
     # norm() 이 -thumb-/자산id 변동분을 떼고 안정 slug 만 비교하므로 EXACT 로 검증.
@@ -48,25 +54,19 @@ FIELDS = [
     ("badge", "EXACT", True),  # 프로모션성 배지(Labor Day 등)라 시점 따라 바뀜
     ("standard_price", "EXACT", False),
     ("currency", "EXACT", False),
-    ("is_default", "EXACT", False),
+    ("is_default", "EXACT", False),  # 스크랩 is_default(카드 기본 variant) vs DB key_model_yn
     ("final_price", "EXACT", True),
-    ("on_sale", "EXACT", True),
+    # on_sale: 사이트 무관 검증 제외 (DB on_sale 은 '할인'이 아니라 '오퍼 존재' 의미)
     ("stock_level_status", "EXACT", True),
-    ("sorting_no", "EXACT", True),  # sort_type 별로 비교
+    ("sorting_no", "EXACT", True),  # sort_type 별, PF 내 상대순위로 비교
     ("review_count", "TOL", True),
     ("review_rating_score", "TOL", True),
 ]
 
-# sorting_no 는 "스크랩한 PF 의 제품 집합" 과 "DB product_order 의 type 집합" 이
-# 일치할 때만 의미가 있다. 아래 PF(=PF 가 곧 type)만 비교하고 나머지는 SKIP.
-# (가전/TV/모니터/액세서리 등은 사이트가 여러 하위 PF 로 쪼개져 있어 순위 범위가
-#  DB 와 달라 -20 ~ -300 씩 어긋난다 → 로직상 비교 불가)
-# 카테고리 표시명은 로케일(ca_fr)에 따라 달라지므로 URL 슬러그로 판정한다
-# (슬러그는 ca_fr 에서도 영어 유지: /ca_fr/watches/all-watches).
-SORTING_NO_PF_SLUGS = {
-    "smartphones", "tablets", "watches", "computers", "audio-sound", "rings",
-}
-
+# 리뷰 관련: 스냅샷 시점차로 값이 벌어져도 휴먼 검토 시 정상인 경우가 많다.
+# ±비율 또는 아래 절대 허용치 중 하나만 충족해도 PASS.
+REVIEW_TOL_RATIO = 0.20
+REVIEW_ABS_TOL = {"review_count": 25, "review_rating_score": 0.3}
 
 def _pf_slug(url):
     """/us/smartphones/all-smartphones -> 'smartphones' ; /ca_fr/watches/... -> 'watches'."""
@@ -74,6 +74,56 @@ def _pf_slug(url):
         return None
     segs = [s for s in str(url).strip("/").split("/") if s]
     return segs[1].lower() if len(segs) >= 2 else None
+
+
+def _pf_site(url):
+    """/ca_fr/watches/... -> 'ca_fr'"""
+    if not url:
+        return None
+    segs = [s for s in str(url).strip("/").split("/") if s]
+    return segs[0].lower() if segs else None
+
+
+# PF URL 슬러그 -> display_category_major (DB category_lv1).
+# 슬러그는 로케일 불문 영어 유지. 'computers' 만 US=PC / CA=Computers 로 갈린다.
+SLUG_TO_MAJOR = {
+    "smartphones": "Mobile", "watches": "Mobile", "tablets": "Mobile",
+    "audio-sound": "Mobile", "mobile-accessories": "Mobile", "rings": "Mobile",
+    "xr": "Mobile",
+    "computers": "Computers",  # US 는 아래 _major_for_slug 에서 PC 로 치환
+    "computing": "Computers", "computer-accessories": "Computers",
+    "audio-devices": "Audio", "jbl-harman-kardon": "Audio",
+    "audio-accessories": "Audio",
+    "tvs": "Television", "lifestyle-tvs": "Television",
+    "tv-accessories": "Television",
+    "monitors": "Display", "movable-screens": "Display", "projectors": "Display",
+    "projector-accessories": "Display", "business": "Display",
+    "cooking-appliances": "Home Appliances", "refrigerators": "Home Appliances",
+    "laundry": "Home Appliances", "dishwashers": "Home Appliances",
+    "microwaves": "Home Appliances", "microwave-ovens": "Home Appliances",
+    "vacuum-cleaners": "Home Appliances", "ranges": "Home Appliances",
+    "home-appliance-accessories": "Home Appliances",
+    "cooktops": "Home Appliances", "wall-ovens": "Home Appliances",
+    "appliance-packages": "Home Appliances",
+    "memory-storage": "Memory Storage",
+}
+# display_category_major 가 Package 인 model_code (그 외 번들은 실제 카테고리로)
+PACKAGE_CODES = {"F-4111BUNDLE1", "F-5B30BUNDLE", "F-9600BUNDLE"}
+# 어느 PF 에서 나왔든 모바일 액세서리인 model_code prefix (케이스/충전/배터리/버즈)
+_MOBILE_ACC_PREFIX = ("EF-", "EP-", "EI-", "ET-", "EB-", "GP-", "EO-", "EE-", "EJ-")
+
+
+def _major_for(mc, pf_url):
+    """model_code / PF URL 로부터 기대 display_category_major 유도. 못하면 None."""
+    u = str(mc).upper()
+    if u in PACKAGE_CODES:
+        return "Package"
+    if u.startswith(_MOBILE_ACC_PREFIX):
+        return "Mobile"
+    major = SLUG_TO_MAJOR.get(_pf_slug(pf_url))
+    if major == "Computers" and _pf_site(pf_url) == "us":
+        return "PC"
+    return major
 
 
 # --------------------------------------------------------------------------- #
@@ -174,8 +224,18 @@ def load_expected(path):
             "review_rating_score": g(stats, "avg_score") if g(stats, "avg_score") is not None else g(sr, "review_rating_score"),
         }
 
-    # 정렬 순서
+    # 정렬 순서: product_order 는 대표모델(representative_model)만 sorting_no 를 갖는다.
+    # 같은 family 의 나머지 SKU 도 같은 sorting_no 를 공유하므로 family_id 로 전파한다.
     order_map = {}
+    fam_df = sh.get("product_family_list", pd.DataFrame())
+    mc_to_fam, fam_to_mcs = {}, collections.defaultdict(list)
+    if not fam_df.empty and {"model_code", "family_id"}.issubset(fam_df.columns):
+        for _, r in fam_df.iterrows():
+            mc, fid = _clean(r.get("model_code")), _clean(r.get("family_id"))
+            if mc and fid:
+                mc_to_fam[str(mc).upper()] = str(fid)
+                fam_to_mcs[str(fid)].append(str(mc).upper())
+
     od = sh.get("product_order", pd.DataFrame())
     if not od.empty and {"sort_type", "sorting_no"}.issubset(od.columns):
         mc_col = _model_code_column(od)
@@ -183,9 +243,15 @@ def load_expected(path):
             mc = _clean(r.get(mc_col)) if mc_col else None
             st = str(_clean(r.get("sort_type")) or "").lower()
             try:
-                order_map[(str(mc), st)] = int(r["sorting_no"])
+                no = int(r["sorting_no"])
             except (TypeError, ValueError):
-                pass
+                continue
+            if not mc:
+                continue
+            order_map[(str(mc).upper(), st)] = no
+            fid = mc_to_fam.get(str(mc).upper())
+            for sib in fam_to_mcs.get(fid, []):
+                order_map.setdefault((sib, st), no)
 
     return expected, order_map
 
@@ -235,37 +301,38 @@ def compare(field, rule, got, exp):
     if g is None:
         return "FAIL", f"scraped 없음 (expected={exp!r})"
     if rule == "TOL":
-        if e == 0:
-            return ("PASS" if g == 0 else "FAIL"), f"got={g} expected={e}"
-        diff = abs(g - e) / abs(e)
-        ok = diff <= TOLERANCE_RATIO
+        absd = abs(g - e)
+        abs_tol = REVIEW_ABS_TOL.get(field, 0)
+        ratio = REVIEW_TOL_RATIO if field in REVIEW_ABS_TOL else TOLERANCE_RATIO
+        ok = (e != 0 and absd / abs(e) <= ratio) or (absd <= abs_tol)
+        pct = (absd / abs(e) * 100) if e else 0
         return ("PASS" if ok else "FAIL"), (
-            f"got={g} expected={e} (Δ{diff * 100:.1f}% / ±{TOLERANCE_RATIO * 100:.0f}%)"
+            f"got={g} expected={e} (Δ{absd:g} / {pct:.0f}%, 허용 ±{ratio * 100:.0f}% 또는 ±{abs_tol})"
         )
     return ("PASS" if g == e else "FAIL"), f"got={got!r} expected={exp!r}"
 
 
-def compare_sorting_no(sort_type, pf_url, got, exp):
-    """sorting_no 전용 비교.
+def compare_sorting_no(sort_type, scraped_rank, rel_rank):
+    """sorting_no 를 'PF 내 상대순위' 로 비교.
 
-      - 비교 대상 PF 가 아니면 SKIP (범위 불일치)
-      - got == exp                         -> PASS
-      - Newest 에서 got - exp == 1          -> PASS
-        (데이터 추출 시점 이후 신제품이 상단에 유입되면 기존 제품이 한 칸씩 밀림)
+    사이트는 한 type 을 여러 하위 PF 로 쪼개 보여줘서 절대 sorting_no 는 안 맞지만,
+    각 하위 PF 는 DB 정렬을 보존한 슬라이스라 'PF 안에서의 상대 순위' 는 맞는다.
+    rel_rank = 그 PF 의 제품들을 DB sorting_no 로 정렬했을 때 이 제품의 위치(1-base).
+
+      Newest      : scraped == rel  또는  scraped - rel == 1 (신제품 유입)  -> PASS
+      Recommended : |scraped - rel| <= 2  -> PASS  (사이트 추천정렬은 약간 큐레이션)
     """
-    slug = _pf_slug(pf_url)
-    if slug not in SORTING_NO_PF_SLUGS:
-        return "SKIP", f"sorting_no 비교 제외: PF '{slug}' 순위 범위가 DB type 범위와 다름"
-    g, e = norm("sorting_no", got), norm("sorting_no", exp)
-    if e is None:
-        return "SKIP", f"expected 없음 (got={got!r})"
-    if g is None:
-        return "FAIL", f"scraped 없음 (expected={exp!r})"
-    if g == e:
-        return "PASS", f"got={g} expected={e}"
-    if str(sort_type).lower() == "newest" and g - e == 1:
-        return "PASS", f"got={g} expected={e} (Δ+1: 신제품 유입 허용)"
-    return "FAIL", f"got={g} expected={e}"
+    if scraped_rank is None or rel_rank is None:
+        return "SKIP", "상대순위 산출 불가 (DB sorting_no 없음/그룹 too small)"
+    d = scraped_rank - rel_rank
+    st = str(sort_type).lower()
+    if st == "newest":
+        ok = d in (0, 1)
+    else:
+        ok = abs(d) <= 2
+    return ("PASS" if ok else "FAIL"), (
+        f"scraped_rank={scraped_rank} rel_rank={rel_rank} (Δ{d:+d})"
+    )
 
 
 def pick_records(records, mc):
@@ -280,15 +347,52 @@ def pick_records(records, mc):
     return by_sort
 
 
+def _relative_ranks(records, order_map):
+    """(sku, sort_type) -> (scraped_rank, rel_rank).
+
+    scraped_rank : 그 (PF, sort) 안에서 sorting_no(카드 index) 오름차순 순위(1-base)
+    rel_rank     : 같은 집합을 DB sorting_no 로 정렬했을 때 순위(1-base).
+                   DB no 를 가진 제품이 3개 미만이면 None (SKIP).
+    """
+    om = {(str(k).upper(), st): v for (k, st), v in order_map.items()}
+    groups = collections.defaultdict(list)
+    for r in records:
+        if r.get("status") or not r.get("sku") or r.get("sorting_no") is None:
+            continue
+        groups[(r.get("source_pf_url"), str(r.get("sort_type") or ""))].append(r)
+
+    out = {}
+    for (_pf, st), recs in groups.items():
+        recs = sorted(recs, key=lambda r: r["sorting_no"])
+        rows_ = []
+        for i, r in enumerate(recs, 1):
+            db = om.get((str(r["sku"]).upper(), st.lower())) or om.get(
+                (str(r.get("model_code") or "").upper(), st.lower())
+            )
+            rows_.append([str(r["sku"]), st, i, db])
+        have = [x for x in rows_ if x[3] is not None]
+        if len(have) < 3:
+            for sku, s, sr, _ in rows_:
+                out[(sku, s)] = (sr, None)
+            continue
+        order = sorted(range(len(have)), key=lambda k: (have[k][3], have[k][2]))
+        rel = {have[k][0]: pos for pos, k in enumerate(order, 1)}
+        for sku, s, sr, _ in rows_:
+            out[(sku, s)] = (sr, rel.get(sku))
+    return out
+
+
 def build_report(records, expected, order_map):
     """rows: [{model_code, field, rule, volatile, result, got, expected, detail}], summary dict."""
     rows = []
     tally = {"PASS": 0, "FAIL": 0, "SKIP": 0, "VOL_FAIL": 0, "NOT_FOUND": 0}
+    rel_ranks = _relative_ranks(records, order_map)
 
     # 기본조합만 수집한 스크랩(--default-only)이면 모든 레코드의 is_default 가 True 라
     # DB 의 key_model_yn(가족 대표) 과는 의미가 달라 비교가 무의미하다 -> is_default SKIP.
     live = [r for r in records if not r.get("status")]
     all_default = bool(live) and all(bool(r.get("is_default")) for r in live)
+
 
     for mc, exp in sorted(expected.items()):
         by_sort = pick_records(records, mc)
@@ -306,19 +410,24 @@ def build_report(records, expected, order_map):
         for field, rule, volatile in FIELDS:
             if field == "sorting_no":
                 for st, rec in sorted(by_sort.items()):
-                    exp_no = order_map.get((str(mc), st.lower()))
-                    res, detail = compare_sorting_no(
-                        st, rec.get("source_pf_url"), rec.get("sorting_no"), exp_no
+                    sr, rr = rel_ranks.get(
+                        (str(rec.get("sku") or mc), st), (rec.get("sorting_no"), None)
                     )
+                    res, detail = compare_sorting_no(st, sr, rr)
                     rows.append({
                         "model_code": mc, "field": f"sorting_no[{st}]", "rule": rule,
                         "volatile": volatile, "result": res,
-                        "got": rec.get("sorting_no"), "expected": exp_no, "detail": detail,
+                        "got": rec.get("sorting_no"),
+                        "expected": order_map.get((str(mc).upper(), st.lower())),
+                        "detail": detail,
                     })
                     _tally(tally, res, volatile)
                 continue
             got_val = ref.get(field)
-            if field == "is_default" and all_default:
+            if field == "display_category_major" and not got_val:
+                got_val = _major_for(mc, ref.get("source_pf_url"))
+                res, detail = compare(field, rule, got_val, exp.get(field))
+            elif field == "is_default" and all_default:
                 res, detail = "SKIP", "is_default 비교 제외: --default-only 스크랩이라 전부 True"
             elif field == "family_id" and (
                 ref.get("is_multi_group")
