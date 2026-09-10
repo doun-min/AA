@@ -88,34 +88,30 @@ def _s(v):
     return str(v)
 
 
-def _result_matrix(detail):
-    """Detail(long) -> 모델코드 × 필드 result 매트릭스.
+# Matrix 시트에 실을 필드 (model_code 는 A열 인덱스). 이 목록만 반영.
+MATRIX_COLS = [
+    "model_name", "display_name", "display_category_major", "image_url",
+    "standard_price", "is_default", "final_price",
+    "sorting_no[Newest]", "sorting_no[Recommended]",
+]
 
-    1행: model_code | <필드명들...> | n_FAIL
+
+def _result_matrix(detail):
+    """Detail(long) -> 모델코드 × (MATRIX_COLS) result 매트릭스.
+
+    1행: model_code | model_name | ... | sorting_no[Recommended] | n_FAIL
     2행~: A열 모델코드, 그 뒤 각 필드의 PASS/FAIL/SKIP/NOT_FOUND
+    n_FAIL = 표시된 필드 중 FAIL 개수 (내림차순 정렬).
     """
-    try:
-        from verify import FIELDS
-        base = [f for f, _r, _v in FIELDS if f not in ("sorting_no", "model_code")]
-    except Exception:  # noqa: BLE001
-        base = []
-    seen = [c for c in dict.fromkeys(detail["field"].tolist()) if c != "model_code"]
-    ordered = (
-        [c for c in base if c in seen]
-        + [c for c in seen if c.startswith("sorting_no")]
-        + [c for c in seen if c not in base and not c.startswith("sorting_no")]
-    )
+    cols = [c for c in MATRIX_COLS if c in set(detail["field"])]
     piv = (
-        detail.pivot_table(
-            index="model_code", columns="field", values="result", aggfunc="first"
-        )
-        .reindex(columns=ordered)
+        detail[detail["field"].isin(cols)]
+        .pivot_table(index="model_code", columns="field", values="result",
+                     aggfunc="first")
+        .reindex(columns=cols)
         .reset_index()
     )
-    piv["n_FAIL"] = (
-        detail[detail["result"] == "FAIL"].groupby("model_code").size()
-        .reindex(piv["model_code"]).fillna(0).astype(int).values
-    )
+    piv["n_FAIL"] = (piv[cols] == "FAIL").sum(axis=1)
     return piv.sort_values(["n_FAIL", "model_code"], ascending=[False, True])
 
 
