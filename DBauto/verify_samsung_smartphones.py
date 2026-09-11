@@ -87,6 +87,21 @@ NEWEST_COUNT_TOLERANCE = int(os.environ.get("SAMSUNG_NEWEST_TOLERANCE", "1") or 
 
 SKU_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9\-/]{4,}$")
 
+# CA/CA_FR 카드: 색상칩 클릭 시 data-model-code 등은 안 바뀌지만, 카드가 color별
+# 개별 PDP 링크(href)를 갖는 경우엔 href 슬러그 끝에 코드가 붙는다.
+#   '.../galaxy-s26-fe-blueberry-128gb-sm-s741wzvaxac/' -> 'SM-S741WZVAXAC'
+# 완전 통합 패밀리 카드(href가 클릭해도 안 바뀜, 예: Z Fold8 Ultra)는 여기서도 못 잡는다.
+_SLUG_SKU_RE = re.compile(r"-((?:sm|ef|ep|et|ei|eo|ej|eb|gp)-[a-z0-9]+)/?(?:[?#].*)?$", re.I)
+
+
+def _slug_href_sku(card):
+    link = first_or_none(
+        card, "a.pd21-product-card__image-cta, a.pd21-product-card__name"
+    )
+    href = link.get_attribute("href") if link else None
+    m = _SLUG_SKU_RE.search(href) if href else None
+    return m.group(1).upper() if m else None
+
 # 검증 시 완전일치가 아니라 ±10% 이내면 pass 로 처리할 필드
 # (데이터 추출 시점과 검증 시점의 시간차로 값이 변동하기 때문)
 TOLERANCE_FIELDS = {"review_count", "review_rating_score"}
@@ -669,9 +684,12 @@ def read_price_save(card):
 def read_card_modelcode(card):
     cb = first_or_none(card, "input.pd21-product-card__compare-checkbox")
     if cb:
-        return cb.get_attribute("data-model-code") or cb.get_attribute("data-modelcode")
+        v = cb.get_attribute("data-model-code") or cb.get_attribute("data-modelcode")
+        if v:
+            return v
     link = first_or_none(card, "a.pd21-product-card__name")
-    return link.get_attribute("data-modelcode") if link else None
+    v = link.get_attribute("data-modelcode") if link else None
+    return v or _slug_href_sku(card)
 
 
 def _chip_label_from_btn(btn):
@@ -837,6 +855,11 @@ def _card_codes(card):
         m = re.search(r"(?:^|&)pi=([^&]+)", fp)
         if m:
             raw.append(m.group(1))
+    # href 슬러그 코드: CA/CA_FR 에서 색상마다 바뀌는 유일한 소스라 2표를 줘서
+    # (안 바뀌는) data-model-code 같은 static 값보다 다수결에서 이기게 한다.
+    slug = _slug_href_sku(card)
+    if slug:
+        raw += [slug, slug]
     out = []
     for c in raw:
         if c and SKU_RE.match(c.strip()):
