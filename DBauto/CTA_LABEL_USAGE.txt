@@ -18,11 +18,20 @@ First collect every PF card and every option SKU with its rendered CTA label.
 The CTA-only collector skips price/review/image fields and rejects non-PF links
 quickly from their DOM:
 
+cd C:\Users\alseh\.local\bin\AA\DBauto
+
+Remove-Item Env:SAMSUNG_MENUS -ErrorAction SilentlyContinue
+Remove-Item Env:SAMSUNG_CATEGORIES -ErrorAction SilentlyContinue
+
 $env:SAMSUNG_SITE="ca_fr"
 $env:SAMSUNG_OUTPUT="pf_cta_ca_fr.json"
 $env:SAMSUNG_RESUME_DIR="pf_cta_resume_ca_fr_cta_only_v2"
 $env:SAMSUNG_SORTS="recommended"
-python collect_pf_cta_labels.py
+$env:SAMSUNG_DEFAULT_ONLY="0"
+$env:SAMSUNG_MAX_CARDS="0"
+$env:SAMSUNG_MAX_COMBOS="0"
+
+python .\collect_pf_cta_labels.py
 
 Use a new resume directory for each fresh CTA collection. Old checkpoints do
 not contain pf_cta_label and are intentionally ignored by the validator.
