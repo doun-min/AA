@@ -1,0 +1,103 @@
+CTA Label verification
+======================
+
+Input and judgment scope
+------------------------
+- Workbook: CTA_Verification.xlsx / sheet: CTA 판정결과
+- Only rows with a model code in column B are judged.
+- The expected value is column J (CTA 표기) itself. It is not read or recalculated from a DB CTA field.
+- The column B model code is applied as the modelCode query parameter to column K URL.
+- The primary CTA for that exact model is compared with column J.
+- Filtered DB files are not used for scope or verdicts.
+- With --pf-data, fresh PF card results are the primary source. Only SKUs not
+  found in the PF data fall back to the column K PD URL.
+
+PF-first CA-FR run
+------------------
+First collect every PF card and every option SKU with its rendered CTA label.
+The CTA-only collector skips price/review/image fields and rejects non-PF links
+quickly from their DOM:
+
+$env:SAMSUNG_SITE="ca_fr"
+$env:SAMSUNG_OUTPUT="pf_cta_ca_fr.json"
+$env:SAMSUNG_RESUME_DIR="pf_cta_resume_ca_fr_cta_only_v2"
+$env:SAMSUNG_SORTS="recommended"
+python collect_pf_cta_labels.py
+
+Use a new resume directory for each fresh CTA collection. Old checkpoints do
+not contain pf_cta_label and are intentionally ignored by the validator.
+CTA validation only needs one complete ordering, so SAMSUNG_SORTS=recommended
+avoids collecting the same PF cards again in Newest order. Omit SAMSUNG_SORTS
+when both Recommended and Newest sorting_no values are required.
+
+CA-FR uses a virtualized PF grid. The CTA-only collector processes each
+rendered batch before scrolling, writes in-progress data to *.partial, and
+promotes it to the normal checkpoint only after the PF is complete. Do not
+reuse pf_cta_resume_ca_fr_cta_only_v1; it may contain empty checkpoints from
+the older preload-all implementation.
+
+Then validate the workbook. PF card labels are used first; only PF-missing SKUs
+open their column K PD URL:
+
+python verify_cta_labels.py CTA_Verification.xlsx --countries ca_fr --pf-data pf_cta_ca_fr.json --output CTA_Verification_ca_fr_pf_checked.xlsx --cache cta_label_cache_cafr_pd_fallback.json --workers 6 --log-every 10
+
+Run a five-row US sample excluding expected Add to cart
+--------------------------------------------------------
+python verify_cta_labels.py CTA_Verification.xlsx --countries us --sample 5 --exclude-expected "Add to cart" --output CTA_Verification_us_sample_checked.xlsx
+
+Run all US rows
+---------------
+python verify_cta_labels.py CTA_Verification.xlsx --countries us --output CTA_Verification_us_checked.xlsx
+
+Run US, CA and CA-FR
+--------------------
+python verify_cta_labels.py CTA_Verification.xlsx --countries us,ca,ca_fr --output CTA_Verification_checked.xlsx
+
+Recommended full run with frequent progress logs
+-----------------------------------------------
+python verify_cta_labels.py CTA_Verification.xlsx --countries us,ca,ca_fr --output CTA_Verification_checked.xlsx --workers 6 --log-every 10
+
+The console reports these phases while running:
+[start] input/output/options
+[scope] target rows by country and expected CTA
+[http] completed/total, elapsed time, ETA, last model and collection counts
+[browser] browser confirmation progress, ETA and collection counts
+[write] workbook output stage
+[done] final PASS/FAIL/NOT_FOUND counts and output paths
+
+Useful options
+--------------
+--workers 6                 concurrent HTTP requests
+--log-every 25              progress/ETA interval (use 10 for more frequent logs)
+--cache cta_label_cache.json
+--pf-data pf_cta_ca_fr.json  PF-first data; repeat for multiple countries
+--refresh                   ignore cached results and fetch again
+--browser-confirm mismatch  render missing and mismatched HTTP results (default)
+--browser-confirm unknown   render only pages where HTTP found no CTA
+--browser-confirm none      never launch the browser
+
+Output columns
+--------------
+판정 모델코드, 모델 적용 URL, CTA 표기 기대값, 실제 SKU, 실제 CTA, CTA 활성,
+CTA 검증, 검증 방식, 검증 상세, 확인 시각
+
+Notes
+-----
+- Label comparison ignores case, repeated whitespace and hyphen variants.
+- Buy and Buy now remain different labels.
+- CA-FR compares equivalent English/French CTA labels by meaning (for example,
+  Add to cart/Ajouter au panier and Where to Buy/Où acheter).
+- CTA enabled/disabled state is recorded for reference but does not affect label PASS/FAIL.
+- PF judgments are PASS/FAIL. A SKU missing from PF data is checked through its
+  PD URL and written as PASS(PD판정) or FAIL(PD판정).
+- A PF card with no transactional CTA is still PF-present and is judged from
+  that empty PF CTA; it does not fall back to PD.
+- A page SKU different from column B is NOT_FOUND, not a verdict for another model.
+- Cache entries are separated by column B model code and column K URL.
+- Stale cache entries containing menu or FAQ buttons instead of product CTAs are refetched automatically.
+- The source workbook is not overwritten unless the same path is explicitly passed to --output.
+- The JSON cache is saved during execution, so rerunning resumes completed model/URL pairs.
+
+Tests
+-----
+python -m unittest -v test_verify_cta_labels.py

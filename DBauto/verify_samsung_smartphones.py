@@ -54,7 +54,28 @@ RESUME_DIR = os.environ.get("SAMSUNG_RESUME_DIR") or None
 
 # Recommended 로 한 번, Newest 로 한 번 전체 수집한다.
 # (정규화 이름, sort code) — code 는 사이트/언어와 무관하게 동일하다.
-SORT_SEQUENCE = [("Recommended", "recommended"), ("Newest", "newest")]
+_AVAILABLE_SORTS = {
+    "recommended": ("Recommended", "recommended"),
+    "newest": ("Newest", "newest"),
+}
+_REQUESTED_SORTS = [
+    value.strip().lower()
+    for value in os.environ.get("SAMSUNG_SORTS", "recommended,newest").split(",")
+    if value.strip()
+]
+_UNKNOWN_SORTS = [value for value in _REQUESTED_SORTS if value not in _AVAILABLE_SORTS]
+if _UNKNOWN_SORTS:
+    raise ValueError(
+        "Unknown SAMSUNG_SORTS value(s): "
+        + ", ".join(_UNKNOWN_SORTS)
+        + ". Use recommended and/or newest."
+    )
+SORT_SEQUENCE = []
+for _sort_code in _REQUESTED_SORTS:
+    if _AVAILABLE_SORTS[_sort_code] not in SORT_SEQUENCE:
+        SORT_SEQUENCE.append(_AVAILABLE_SORTS[_sort_code])
+if not SORT_SEQUENCE:
+    raise ValueError("SAMSUNG_SORTS must contain recommended and/or newest.")
 
 # 디버깅/부분 실행용 (환경변수로 조절). 0 또는 미설정이면 전체.
 MAX_CARDS = int(os.environ.get("SAMSUNG_MAX_CARDS", "0")) or None
@@ -130,6 +151,9 @@ EXACT_MATCH_FIELDS = [
     "sort_type",
     "sorting_no",
     "is_default",
+    "pf_cta_label",
+    "pf_cta_class",
+    "pf_cta_enabled",
 ]
 
 _CUR_SYMBOL = {
@@ -351,6 +375,11 @@ def set_sort(page, sort_name, sort_code):
     page.wait_for_timeout(1500)
     page.wait_for_selector(CARD_SELECTOR, timeout=30000)
     page.wait_for_timeout(1000)
+    # Do not label a scan as Recommended/Newest solely because its control was
+    # clicked; CA_FR's visible label is localized, but this internal code is
+    # stable across locales.
+    if read_current_sort_code(page) != sort_code:
+        return None
     return sort_name
 
 
@@ -672,6 +701,55 @@ def read_stock_status(card):
     return "unknown"
 
 
+def read_pf_cta(card):
+    """Read the transactional CTA for the currently selected PF-card SKU."""
+    candidates = card.locator(
+        "div.pd21-product-card__cta-wrap a, "
+        "div.pd21-product-card__cta-wrap button, "
+        "div.pd21-product-card__cta a, "
+        "div.pd21-product-card__cta button"
+    )
+    terms = re.compile(
+        r"add to cart|buy now|notify me|where to buy|pre[ -]?order|"
+        r"ajouter au panier|acheter|magasinez|m[’']avertir|où acheter|ou acheter",
+        re.I,
+    )
+    ranked = []
+    for index in range(candidates.count()):
+        node = candidates.nth(index)
+        try:
+            if not node.is_visible():
+                continue
+            label = " ".join((node.inner_text() or node.get_attribute("aria-label") or "").split())
+            classes = node.get_attribute("class") or ""
+            lowered = classes.casefold()
+            if not label or not terms.search(label):
+                continue
+            if "learn-more" in lowered or "quick-view" in lowered:
+                continue
+            score = 10
+            for signal, points in (
+                ("js-cta-stock", 260), ("js-cta-addon", 250),
+                ("tg-add-to-cart", 245), ("js-buy-now", 240),
+                ("tg-wtb", 235), ("js-cta-buy", 230),
+                ("js-pfv2-buy-now", 220), ("anchorbtn", 210),
+            ):
+                if signal in lowered:
+                    score = max(score, points)
+            ranked.append((score, index, node, label, classes))
+        except Exception:  # noqa: BLE001 - one malformed CTA must not drop the card
+            continue
+    if not ranked:
+        return {"pf_cta_label": None, "pf_cta_class": None, "pf_cta_enabled": None}
+    _score, _index, node, label, classes = max(ranked, key=lambda item: (item[0], -item[1]))
+    disabled = (
+        node.is_disabled()
+        or (node.get_attribute("aria-disabled") or "").casefold() == "true"
+        or "disabled" in classes.casefold()
+    )
+    return {"pf_cta_label": label, "pf_cta_class": classes, "pf_cta_enabled": not disabled}
+
+
 def read_price_save(card):
     el = first_or_none(
         card,
@@ -943,6 +1021,7 @@ def _variant_record(
         }
     )
     rec.update(read_prices(card))
+    rec.update(read_pf_cta(card))
     if mism:
         rec["sku_audit_mismatch"] = mism
     return rec
@@ -1006,7 +1085,12 @@ def extract_all(page, sort_type, progress=None):
 
     # 무한 스크롤 PF 는 첫 배치만 렌더되므로 끝까지 스크롤해 모두 로드한다.
     # (정렬을 바꾸면 그리드가 처음부터 다시 그려지므로 sort 마다 호출)
-    load_all_cards(page)
+    loaded_cards = load_all_cards(page)
+    target_cards = _pf_result_count(page)
+    # A partial sort must never supersede an earlier complete snapshot.  Keep
+    # the state on every extracted row so an incremental merge can decide
+    # independently for Newest and Recommended.
+    load_complete = target_cards is None or loaded_cards >= target_cards
     page.evaluate("window.scrollTo(0, 0)")
     page.wait_for_timeout(400)
 
@@ -1026,14 +1110,25 @@ def extract_all(page, sort_type, progress=None):
             pass
         try:
             base = extract_card_base(card)
-            results.extend(
-                extract_card_variants(page, card, base, sort_type, i + 1)
-            )
+            card_records = extract_card_variants(page, card, base, sort_type, i + 1)
+            # data-cardidx is the browser's authoritative PF position. Retain
+            # the historical one-based sorting_no for compatibility.
+            raw_cardidx = card.get_attribute("data-cardidx")
+            try:
+                cardidx = int(raw_cardidx)
+            except (TypeError, ValueError):
+                cardidx = i
+            for rec in card_records:
+                rec["cardidx"] = cardidx
+                rec["cardidx_source"] = "pf-data-cardidx"
+                rec["pf_load_complete"] = load_complete
+            results.extend(card_records)
         except Exception as e:  # noqa: BLE001 - 카드 하나 실패해도 다음 카드 진행
             results.append(
                 {
                     "sort_type": sort_type,
                     "product_id": card.get_attribute("data-productidx"),
+                    "pf_load_complete": load_complete,
                     "status": f"card error: {type(e).__name__}: {e}",
                 }
             )
@@ -1293,7 +1388,42 @@ def _pf_result_count(page):
     return int(n) if n is not None and n > 0 else None
 
 
-def load_all_cards(page, max_iter=80, settle=3):
+VIEW_MORE_SELECTOR = (
+    "button.pd21-product-finder__view-more:visible, "
+    "button[class*='view-more']:not([class*='learn-more']):visible, "
+    "[role='button'][class*='view-more']:not([class*='learn-more']):visible, "
+    "button:text-is(\"Voir plus\"):visible, a:text-is(\"Voir plus\"):visible, "
+    "button:has-text('Afficher plus'):visible, a:has-text('Afficher plus'):visible"
+)
+
+
+def _scroll_pf_containers(page):
+    """Trigger lazy loading in PF-owned scrollers as well as the page body.
+
+    CA-FR frequently keeps the product grid in an overflow container; scrolling
+    only ``window`` leaves its intersection observer untouched.
+    """
+    page.evaluate(
+        """() => {
+            const roots = document.querySelectorAll(
+                '.js-pfv2-finder, .pd21-product-finder, .pd21-product-finder__content'
+            );
+            for (const root of roots) {
+                const nodes = [root, ...root.querySelectorAll('*')];
+                for (const node of nodes) {
+                    const style = getComputedStyle(node);
+                    if (node.scrollHeight <= node.clientHeight ||
+                        !/(auto|scroll)/.test(style.overflowY)) continue;
+                    node.scrollTop = node.scrollHeight;
+                    node.dispatchEvent(new Event('scroll', {bubbles: true}));
+                }
+            }
+            window.scrollTo(0, document.body.scrollHeight);
+        }"""
+    )
+
+
+def load_all_cards(page, max_iter=160, settle=8):
     """무한 스크롤 PF: 활성 카드 수가 더 이상 안 늘거나(연속 settle회) result-count 에
     도달할 때까지 페이지 끝으로 스크롤해 카드를 모두 로드한다.
     MAX_CARDS 가 걸려 있으면 그만큼만 채우고 멈춘다.
@@ -1307,6 +1437,41 @@ def load_all_cards(page, max_iter=80, settle=3):
         n = page.locator(CARD_SELECTOR).count()
         if n >= cap:
             break
+        # CA/CA_FR PF는 무한 스크롤만으로 다음 상품을 붙이지 않고 하단의
+        # "View more" 버튼을 눌러야 하는 페이지가 있다. 이 버튼을 누르지
+        # 않으면 214개 중 첫 4~8개만 수집되는 문제가 발생한다.
+        # The CA/CA-FR UI alternates between the standard class and localized
+        # markup.  Prefer the explicit selector, with a class-name fallback.
+        # Use :visible rather than .first: CA-FR often retains a hidden
+        # desktop/mobile duplicate ahead of the actionable "Voir plus" node.
+        more = page.locator(VIEW_MORE_SELECTOR).first
+        if more.count():
+            try:
+                more.scroll_into_view_if_needed(timeout=3000)
+                before = n
+                try:
+                    more.click(timeout=5000)
+                except Exception:
+                    more.evaluate("el => el.click()")
+                # A fixed short sleep often samples the grid before CA/CA-FR
+                # has appended its next batch. Wait specifically for growth.
+                try:
+                    page.wait_for_function(
+                        "(before) => document.querySelectorAll(" + repr(CARD_SELECTOR) + ").length > before",
+                        arg=before,
+                        timeout=8000,
+                    )
+                except PWTimeout:
+                    # Some PFs only trigger their observer after their own
+                    # scroll container moves, rather than window scrolling.
+                    _scroll_pf_containers(page)
+                    page.mouse.wheel(0, 6000)
+                    page.wait_for_timeout(1800)
+                stable = 0
+                prev = page.locator(CARD_SELECTOR).count()
+                continue
+            except Exception:  # noqa: BLE001 - 기존 scroll fallback 계속 사용
+                pass
         if n == prev:
             stable += 1
             if stable >= settle:
@@ -1315,7 +1480,7 @@ def load_all_cards(page, max_iter=80, settle=3):
             stable = 0
         prev = n
         try:
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            _scroll_pf_containers(page)
         except Exception:  # noqa: BLE001
             page.mouse.wheel(0, 6000)
         page.wait_for_timeout(1100)
@@ -1380,6 +1545,7 @@ def _dedup_compare_keys():
         "final_price", "currency", "on_sale", "stock_level_status", "badge",
         "family_id", "product_url", "cta_pd_url", "image_url", "review_count",
         "review_rating_score", "is_default",
+        "pf_cta_label", "pf_cta_class", "pf_cta_enabled",
     )
 
 
@@ -1524,6 +1690,7 @@ def run_scan(progress_file=None):
         cats = discover_all_categories(page)
         log(
             f"[info] menus={'ALL' if not MENUS else ','.join(MENUS)}  "
+            f"sorts={','.join(code for _, code in SORT_SEQUENCE)}  "
             f"unique PF pages={len(cats)}  "
             f"(dup menu-paths collapsed: "
             f"{sum(len(c['sources']) for c in cats) - len(cats)})"
@@ -1584,7 +1751,13 @@ def main():
             file=sys.stderr,
         )
     out = {"records": records, "count_verification": verification}
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    output_path = os.environ.get("SAMSUNG_OUTPUT")
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as file:
+            json.dump(out, file, ensure_ascii=False, indent=2)
+        print(f"[done] output={output_path}", file=sys.stderr)
+    else:
+        print(json.dumps(out, ensure_ascii=False, indent=2))
     return out
 
 
