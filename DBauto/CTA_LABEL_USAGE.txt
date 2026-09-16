@@ -12,17 +12,46 @@ Input and judgment scope
 - With --pf-data, fresh PF card results are the primary source. Only SKUs not
   found in the PF data fall back to the column K PD URL.
 
-PF-first CA-FR run
-------------------
+PF-first collection run
+-----------------------
 First collect every PF card and every option SKU with its rendered CTA label.
 The CTA-only collector skips price/review/image fields and rejects non-PF links
-quickly from their DOM:
+quickly from their DOM. Run each country block in a separate PowerShell
+terminal when collecting them in parallel.
+
+US:
 
 cd C:\Users\alseh\.local\bin\AA\DBauto
-
 Remove-Item Env:SAMSUNG_MENUS -ErrorAction SilentlyContinue
 Remove-Item Env:SAMSUNG_CATEGORIES -ErrorAction SilentlyContinue
+$env:SAMSUNG_SITE="us"
+$env:SAMSUNG_OUTPUT="pf_cta_us.json"
+$env:SAMSUNG_RESUME_DIR="pf_cta_resume_us_cta_only_v2"
+$env:SAMSUNG_SORTS="recommended"
+$env:SAMSUNG_DEFAULT_ONLY="0"
+$env:SAMSUNG_MAX_CARDS="0"
+$env:SAMSUNG_MAX_COMBOS="0"
+python .\collect_pf_cta_labels.py
 
+CA:
+
+cd C:\Users\alseh\.local\bin\AA\DBauto
+Remove-Item Env:SAMSUNG_MENUS -ErrorAction SilentlyContinue
+Remove-Item Env:SAMSUNG_CATEGORIES -ErrorAction SilentlyContinue
+$env:SAMSUNG_SITE="ca"
+$env:SAMSUNG_OUTPUT="pf_cta_ca.json"
+$env:SAMSUNG_RESUME_DIR="pf_cta_resume_ca_cta_only_v2"
+$env:SAMSUNG_SORTS="recommended"
+$env:SAMSUNG_DEFAULT_ONLY="0"
+$env:SAMSUNG_MAX_CARDS="0"
+$env:SAMSUNG_MAX_COMBOS="0"
+python .\collect_pf_cta_labels.py
+
+CA-FR:
+
+cd C:\Users\alseh\.local\bin\AA\DBauto
+Remove-Item Env:SAMSUNG_MENUS -ErrorAction SilentlyContinue
+Remove-Item Env:SAMSUNG_CATEGORIES -ErrorAction SilentlyContinue
 $env:SAMSUNG_SITE="ca_fr"
 $env:SAMSUNG_OUTPUT="pf_cta_ca_fr.json"
 $env:SAMSUNG_RESUME_DIR="pf_cta_resume_ca_fr_cta_only_v2"
@@ -30,7 +59,6 @@ $env:SAMSUNG_SORTS="recommended"
 $env:SAMSUNG_DEFAULT_ONLY="0"
 $env:SAMSUNG_MAX_CARDS="0"
 $env:SAMSUNG_MAX_COMBOS="0"
-
 python .\collect_pf_cta_labels.py
 
 Use a new resume directory for each fresh CTA collection. Old checkpoints do
@@ -39,11 +67,11 @@ CTA validation only needs one complete ordering, so SAMSUNG_SORTS=recommended
 avoids collecting the same PF cards again in Newest order. Omit SAMSUNG_SORTS
 when both Recommended and Newest sorting_no values are required.
 
-CA-FR uses a virtualized PF grid. The CTA-only collector processes each
-rendered batch before scrolling, writes in-progress data to *.partial, and
-promotes it to the normal checkpoint only after the PF is complete. Do not
-reuse pf_cta_resume_ca_fr_cta_only_v1; it may contain empty checkpoints from
-the older preload-all implementation.
+US, CA and CA-FR all use incremental PF collection. The CTA-only collector
+processes each rendered batch before scrolling, writes in-progress data to
+*.partial, and promotes it to the normal checkpoint only after the PF is
+complete. Use a new v2 resume directory for US and CA as well; older v1
+checkpoints were created by the preload-all implementation.
 
 Then validate the workbook. PF card labels are used first; only PF-missing SKUs
 open their column K PD URL:
@@ -110,3 +138,4 @@ Notes
 Tests
 -----
 python -m unittest -v test_verify_cta_labels.py
+python -m unittest -v test_collect_pf_cta_labels.py

@@ -147,60 +147,6 @@ def _extract_card_options(page, card, sort_type, sorting_no):
     return records
 
 
-def _extract_pf(page, sort_type, progress=None):
-    loaded_cards = core.load_all_cards(page)
-    target_cards = core._pf_result_count(page)
-    load_complete = target_cards is None or loaded_cards >= target_cards
-    page.evaluate("window.scrollTo(0, 0)")
-    page.wait_for_timeout(300)
-
-    cards = page.locator(core.CARD_SELECTOR)
-    total = cards.count()
-    if core.MAX_CARDS:
-        total = min(total, core.MAX_CARDS)
-    if progress:
-        progress.set_cards(total)
-
-    results = []
-    for index in range(total):
-        card = cards.nth(index)
-        try:
-            card.scroll_into_view_if_needed(timeout=3000)
-        except Exception:
-            # Scrolling is only a visibility aid. A moving PF card must still
-            # be read instead of being converted into a card-level failure.
-            try:
-                card.evaluate("el => el.scrollIntoView({block: 'center'})")
-            except Exception:
-                pass
-        try:
-            records = _extract_card_options(
-                page, card, sort_type, index + 1
-            )
-            raw_cardidx = card.get_attribute("data-cardidx")
-            try:
-                cardidx = int(raw_cardidx)
-            except (TypeError, ValueError):
-                cardidx = index
-            for record in records:
-                record["cardidx"] = cardidx
-                record["pf_load_complete"] = load_complete
-            results.extend(records)
-        except Exception as exc:
-            results.append(
-                {
-                    "sort_type": sort_type,
-                    "sorting_no": index + 1,
-                    "pf_load_complete": load_complete,
-                    "status": f"card error: {type(exc).__name__}: {exc}",
-                }
-            )
-            core._close_quick_view(page)
-        if progress:
-            progress.card(index + 1, sort_type, len(results))
-    return results
-
-
 def _card_snapshots(page):
     """Return stable identities for the cards currently mounted in the DOM."""
     return page.locator(core.CARD_SELECTOR).evaluate_all(
@@ -515,32 +461,26 @@ def _scan_category(
             )
             continue
 
-        if core.SITE == "ca_fr":
-            extracted, sort_complete, seen, target = _extract_pf_virtual(
-                page,
-                applied,
-                progress=progress,
-                partial_path=partial_path,
-                initial_records=initial_records,
-                context=context,
+        extracted, sort_complete, seen, target = _extract_pf_virtual(
+            page,
+            applied,
+            progress=progress,
+            partial_path=partial_path,
+            initial_records=initial_records,
+            context=context,
+        )
+        complete = complete and sort_complete
+        output.extend(extracted)
+        if not sort_complete:
+            output.append(
+                {
+                    **context,
+                    "status": (
+                        f"incomplete: incremental PF cards_seen={seen} "
+                        f"target={target or 'unknown'}"
+                    ),
+                }
             )
-            complete = complete and sort_complete
-            output.extend(extracted)
-            if not sort_complete:
-                output.append(
-                    {
-                        **context,
-                        "status": (
-                            f"incomplete: virtual PF cards_seen={seen} "
-                            f"target={target or 'unknown'}"
-                        ),
-                    }
-                )
-            continue
-
-        for record in _extract_pf(page, applied, progress=progress):
-            record.update(context)
-            output.append(record)
     if not output:
         return ([{**context, "status": "incomplete: no records extracted"}], False)
     return output, complete
@@ -584,7 +524,7 @@ def run():
                     pass
 
             initial_records = []
-            if core.SITE == "ca_fr" and partial and os.path.exists(partial):
+            if partial and os.path.exists(partial):
                 try:
                     with open(partial, encoding="utf-8") as file:
                         initial_records = json.load(file)

@@ -701,19 +701,24 @@ def read_stock_status(card):
     return "unknown"
 
 
+PF_CTA_SELECTOR = (
+    "div.pd21-product-card__cta-wrap a, "
+    "div.pd21-product-card__cta-wrap button, "
+    "div.pd21-product-card__cta-container a, "
+    "div.pd21-product-card__cta-container button, "
+    "div.pd21-product-card__cta a, "
+    "div.pd21-product-card__cta button"
+)
+PF_CTA_TERMS = re.compile(
+    r"add to cart|buy now|\bbuy\b|notify me|where to buy|pre[ -]?order|"
+    r"ajouter au panier|acheter|magasinez|m[’']avertir|où acheter|ou acheter",
+    re.I,
+)
+
+
 def read_pf_cta(card):
     """Read the transactional CTA for the currently selected PF-card SKU."""
-    candidates = card.locator(
-        "div.pd21-product-card__cta-wrap a, "
-        "div.pd21-product-card__cta-wrap button, "
-        "div.pd21-product-card__cta a, "
-        "div.pd21-product-card__cta button"
-    )
-    terms = re.compile(
-        r"add to cart|buy now|notify me|where to buy|pre[ -]?order|"
-        r"ajouter au panier|acheter|magasinez|m[’']avertir|où acheter|ou acheter",
-        re.I,
-    )
+    candidates = card.locator(PF_CTA_SELECTOR)
     ranked = []
     for index in range(candidates.count()):
         node = candidates.nth(index)
@@ -723,7 +728,7 @@ def read_pf_cta(card):
             label = " ".join((node.inner_text() or node.get_attribute("aria-label") or "").split())
             classes = node.get_attribute("class") or ""
             lowered = classes.casefold()
-            if not label or not terms.search(label):
+            if not label or not PF_CTA_TERMS.search(label):
                 continue
             if "learn-more" in lowered or "quick-view" in lowered:
                 continue
