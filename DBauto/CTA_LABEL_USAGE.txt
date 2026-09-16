@@ -11,6 +11,12 @@ Input and judgment scope
 - Filtered DB files are not used for scope or verdicts.
 - With --pf-data, fresh PF card results are the primary source. Only SKUs not
   found in the PF data fall back to the column K PD URL.
+- An exact SKU found on a PF remains a PF verdict even when its CTA is empty
+  or mismatched. It never falls back to PD in that case.
+- Only an exact SKU absent from all supplied PF data uses PD fallback.
+- PD matches/mismatches are written as PASS(PD판정)/FAIL(PD판정). A PD SKU
+  mismatch or fetch/browser error is also FAIL(PD판정). A missing column K URL
+  remains NOT_FOUND because no PD judgment can be attempted.
 
 PF-first collection run
 -----------------------
@@ -78,6 +84,34 @@ open their column K PD URL:
 
 python verify_cta_labels.py CTA_Verification.xlsx --countries ca_fr --pf-data pf_cta_ca_fr.json --output CTA_Verification_ca_fr_pf_checked.xlsx --cache cta_label_cache_cafr_pd_fallback.json --workers 6 --log-every 10
 
+Run CA-FR on another PC with the existing PD cache
+----------------------------------------------------
+Email these files from the current PC:
+- verify_cta_labels.py
+- CTA_Verification.xlsx
+- cta_label_cache_cafr.json
+- CTA_LABEL_USAGE.txt
+
+Keep the completed pf_cta_ca_fr.json from the other PC. Put all files in one
+folder. In the PowerShell block below, edit only the $workDir line. The output
+is written back to CTA_Verification.xlsx; the script first creates
+CTA_Verification.pre_cta_check.xlsx as a backup if that backup does not exist.
+
+$workDir = "C:\CHANGE_THIS\DBauto"
+Set-Location -LiteralPath $workDir
+
+python "$workDir\verify_cta_labels.py" "$workDir\CTA_Verification.xlsx" `
+  --countries ca_fr `
+  --pf-data "$workDir\pf_cta_ca_fr.json" `
+  --output "$workDir\CTA_Verification.xlsx" `
+  --cache "$workDir\cta_label_cache_cafr.json" `
+  --workers 6 `
+  --log-every 10
+
+The existing PD cache is reused. Only PF-missing rows without a valid cached
+PD result are fetched again. Do not use --refresh when the transferred cache
+should be reused. Close the workbook in Excel before running the command.
+
 Run a five-row US sample excluding expected Add to cart
 --------------------------------------------------------
 python verify_cta_labels.py CTA_Verification.xlsx --countries us --sample 5 --exclude-expected "Add to cart" --output CTA_Verification_us_sample_checked.xlsx
@@ -129,7 +163,8 @@ Notes
   PD URL and written as PASS(PD판정) or FAIL(PD판정).
 - A PF card with no transactional CTA is still PF-present and is judged from
   that empty PF CTA; it does not fall back to PD.
-- A page SKU different from column B is NOT_FOUND, not a verdict for another model.
+- During PD fallback, a page SKU different from column B is FAIL(PD판정).
+- A valid browser-dom PD cache result is reused without opening the browser again.
 - Cache entries are separated by column B model code and column K URL.
 - Stale cache entries containing menu or FAQ buttons instead of product CTAs are refetched automatically.
 - The source workbook is not overwritten unless the same path is explicitly passed to --output.

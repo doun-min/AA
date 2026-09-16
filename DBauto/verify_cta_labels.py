@@ -23,6 +23,7 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
+PD_SUFFIX = "(PD\ud310\uc815)"
 SOURCE_SHEET = "CTA 판정결과"
 RESULT_HEADERS = (
     "판정 모델코드", "모델 적용 URL", "CTA 표기 기대값", "실제 SKU", "실제 CTA",
@@ -86,6 +87,11 @@ def canonical_label(value, country=None):
 
 def labels_match(actual, expected, country=None):
     return canonical_label(actual, country) == canonical_label(expected, country)
+
+
+def unverified_failure_verdict(used_pd_fallback):
+    """Treat an unusable PD fallback as a failed verdict, not an unknown one."""
+    return "FAIL" + PD_SUFFIX if used_pd_fallback else "NOT_FOUND"
 
 
 def is_no_rule_expected(value):
@@ -245,6 +251,20 @@ def cache_item_usable(item):
         "text": actual,
     }
     return candidate_score(cached_item) >= 0
+
+
+def needs_browser_confirmation(item, expected, country, mode):
+    """Return whether an HTTP/cache result still needs rendered-DOM confirmation."""
+    if mode == "none":
+        return False
+    if item.get("method") == "browser-dom" and cache_item_usable(item):
+        return False
+    unknown = not item.get("actual_cta")
+    if unknown and is_no_rule_expected(expected):
+        return False
+    if mode == "unknown":
+        return unknown
+    return unknown or not labels_match(item.get("actual_cta"), expected, country)
 
 
 def product_json_ld(html):
@@ -618,14 +638,10 @@ def main():
         expected = value["expected"]
         country = value["country"]
         item = cache[cache_key(code, url)]
-        unknown = not item.get("actual_cta")
-        mismatch = not labels_match(item.get("actual_cta"), expected, country)
-        if args.browser_confirm == "unknown" and unknown:
-            if not (unknown and is_no_rule_expected(expected)):
-                browser_urls.append((code, url, expected))
-        elif args.browser_confirm == "mismatch" and (unknown or mismatch):
-            if not (unknown and is_no_rule_expected(expected)):
-                browser_urls.append((code, url, expected))
+        if needs_browser_confirmation(
+            item, expected, country, args.browser_confirm
+        ):
+            browser_urls.append((code, url, expected))
     if browser_urls:
         from playwright.sync_api import sync_playwright
         print(f"[browser] start confirm={len(browser_urls)}", flush=True)
@@ -687,10 +703,10 @@ def main():
             verdict = "NOT_FOUND"
             reason = "column K URL is empty"
         elif actual_sku and normalize_sku(actual_sku) != normalize_sku(row["code"]):
-            verdict = "NOT_FOUND"
+            verdict = unverified_failure_verdict(used_pd_fallback)
             reason = f"page SKU differs from column B: page={actual_sku}, B={row['code']}"
         elif item.get("error") and not actual:
-            verdict = "NOT_FOUND"
+            verdict = unverified_failure_verdict(used_pd_fallback)
             reason = item["error"]
         elif is_no_rule_expected(expected) and not actual:
             verdict = "NO_RULE"
@@ -703,7 +719,7 @@ def main():
             enabled = item.get("enabled")
             verdict = "PASS" if label_match else "FAIL"
             if used_pd_fallback:
-                verdict += "(PD판정)"
+                verdict += PD_SUFFIX
             reason = (
                 f"judgment_source={'PD fallback' if used_pd_fallback else 'PF card'}; "
                 f"expected source=CTA 표기; label_match={label_match}; enabled={enabled}; "

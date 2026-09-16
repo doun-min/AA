@@ -4,15 +4,44 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from verify_cta_labels import (
+    PD_SUFFIX,
     extract_from_html,
     labels_match,
     load_pf_data,
+    needs_browser_confirmation,
     normalize_label,
+    unverified_failure_verdict,
     with_model_code,
 )
 
 
 class CTALabelTests(unittest.TestCase):
+    def test_pd_verdict_suffix_and_unverified_failures(self):
+        self.assertEqual(PD_SUFFIX, "(PD\ud310\uc815)")
+        self.assertEqual(
+            unverified_failure_verdict(True), "FAIL(PD\ud310\uc815)"
+        )
+        self.assertEqual(unverified_failure_verdict(False), "NOT_FOUND")
+
+    def test_reuses_valid_browser_dom_results(self):
+        confirmed = {
+            "actual_cta": "Where to buy",
+            "method": "browser-dom",
+            "candidate": {"tag": "button", "class": "cta-button"},
+        }
+        self.assertFalse(
+            needs_browser_confirmation(
+                confirmed, "Add to cart", "us", "mismatch"
+            )
+        )
+
+        http_result = dict(confirmed, method="http-html")
+        self.assertTrue(
+            needs_browser_confirmation(
+                http_result, "Add to cart", "us", "mismatch"
+            )
+        )
+
     def test_react_pdp_cta(self):
         html = '<button class="Summary_ctaATCButton Button_disable" disabled aria-label="Add to cart">Add to cart</button>'
         result = extract_from_html(html, "Notify Me")
