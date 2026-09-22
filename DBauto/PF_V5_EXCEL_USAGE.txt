@@ -1,0 +1,31 @@
+PF v5 JSON to Excel
+===================
+
+The workbook always contains US, CA, and CA_FR sheets. Supplying one site
+replaces only that site's sheet and preserves the other sheets.
+
+Create the initial workbook with US while CA and CA-FR are still running:
+
+  python .\export_pf_v5_json_to_excel.py `
+    --output .\pf_card_details_v5.xlsx `
+    --input us=.\pf_card_details_us_v5.json
+
+After CA finishes, annotate its completed JSON and update only the CA sheet:
+
+  python .\annotate_pf_card_details_v5.py .\pf_card_details_ca_v5.json
+
+  python .\export_pf_v5_json_to_excel.py `
+    --output .\pf_card_details_v5.xlsx `
+    --input ca=.\pf_card_details_ca_v5.json
+
+On the CA-FR computer, place the workbook beside the JSON. After the crawl
+finishes, annotate the JSON and update only the CA_FR sheet:
+
+  python .\annotate_pf_card_details_v5.py .\pf_card_details_ca_fr_v5.json
+
+  python .\export_pf_v5_json_to_excel.py `
+    --output .\pf_card_details_v5.xlsx `
+    --input ca_fr=.\pf_card_details_ca_fr_v5.json
+
+This updates only CA_FR. It does not crawl Samsung.com and does not modify the
+US or CA sheets. The same command can be used again when a site's JSON changes.
