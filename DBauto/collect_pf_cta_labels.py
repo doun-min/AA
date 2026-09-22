@@ -7,6 +7,7 @@ but omits price/review/image and sorting_no verification fields.
 
 import json
 import os
+import re
 import sys
 import time
 
@@ -23,6 +24,100 @@ PF_CONTAINER_SELECTOR = ".js-pfv2-finder, .pd21-product-finder"
 PF_DETECT_TIMEOUT_MS = int(os.environ.get("SAMSUNG_PF_DETECT_TIMEOUT_MS", "5000"))
 VIRTUAL_MAX_PASSES = int(os.environ.get("SAMSUNG_VIRTUAL_MAX_PASSES", "500"))
 VIRTUAL_STABLE_PASSES = int(os.environ.get("SAMSUNG_VIRTUAL_STABLE_PASSES", "5"))
+
+
+def _clean_display_name(value):
+    return " ".join(str(value or "").split()) or None
+
+
+def _display_name_is_truncated(value):
+    return bool(re.search(r"(?:\.{3}|\u2026)", value or ""))
+
+
+def select_pf_display_name(candidates):
+    """Prefer a complete PF name while retaining a truncated last resort."""
+    truncated_fallback = None
+    for raw_value in candidates:
+        lines = []
+        for line in str(raw_value or "").splitlines():
+            line = _clean_display_name(line)
+            if line and line not in lines:
+                lines.append(line)
+        if not lines:
+            continue
+
+        first = lines[0]
+        if not _display_name_is_truncated(first):
+            return first
+        truncated_fallback = truncated_fallback or first
+
+        # Some cards render a shortened visible line and an accessibility copy
+        # of the complete name directly below it. Only accept a later line when
+        # it begins with the same name prefix, not when it is a marketing tagline.
+        prefix = re.split(r"(?:\.{3}|\u2026)", first, maxsplit=1)[0].strip()
+        prefix = prefix[: min(len(prefix), 32)].casefold()
+        for line in lines[1:]:
+            if (
+                prefix
+                and line.casefold().startswith(prefix)
+                and not _display_name_is_truncated(line)
+            ):
+                return line
+    return truncated_fallback
+
+
+def _without_model_suffix(value, model_codes):
+    value = _clean_display_name(value)
+    for model_code in sorted(set(model_codes), key=len, reverse=True):
+        value = re.sub(
+            rf"(?:[.\s|:-]+)?{re.escape(model_code)}\s*$",
+            "",
+            value or "",
+            flags=re.I,
+        ).strip(" .|:-")
+    return value or None
+
+
+def read_pf_display_name(card):
+    """Read the complete name shown by a PF card across US/CA/CA-FR DOMs."""
+    name_wrap = core.first_or_none(card, "div.pd21-product-card__name-wrap")
+    name_link = core.first_or_none(
+        card, "a.pd21-product-card__name, a.pd21-product-card__image-cta"
+    )
+    titled = core.first_or_none(
+        card,
+        "div.pd21-product-card__name-wrap [title], "
+        "a.pd21-product-card__name[title]",
+    )
+
+    visible = name_wrap.inner_text() if name_wrap else None
+    # CSS line-clamp does not shorten textContent. If the server emitted a
+    # literal ellipsis, CA/CA-FR usually preserve the full name in aria-label,
+    # while US exposes it as the analytics product-name parameter (pn).
+    text_content = name_wrap.text_content() if name_wrap else None
+    title = (
+        (name_wrap.get_attribute("title") if name_wrap else None)
+        or (titled.get_attribute("title") if titled else None)
+        or (name_link.get_attribute("title") if name_link else None)
+    )
+    aria_label = (
+        (name_wrap.get_attribute("aria-label") if name_wrap else None)
+        or (name_link.get_attribute("aria-label") if name_link else None)
+    )
+    aria_label = _without_model_suffix(aria_label, core._card_codes(card))
+    analytics_name = core._feedback_params(card).get("pn")
+
+    return select_pf_display_name(
+        (visible, title, aria_label, analytics_name, text_content)
+    )
+
+
+def _checkpoint_has_display_names(records):
+    product_rows = [record for record in records if not record.get("status")]
+    return not product_rows or all(
+        "display_name_PF" in record or "display_name_pf" in record
+        for record in product_rows
+    )
 
 
 def _write_json(path, data):
@@ -56,6 +151,7 @@ def _minimal_variant_record(
     color_name,
     capacity,
     is_default,
+    display_name_pf,
     prev_code=None,
 ):
     sku = source = None
@@ -77,6 +173,7 @@ def _minimal_variant_record(
         "sort_type": sort_type,
         "sorting_no": sorting_no,
         "is_default": is_default,
+        "display_name_PF": display_name_pf,
         "product_color": color_name,
         "capacity": capacity,
         **cta,
@@ -90,6 +187,7 @@ def _minimal_variant_record(
 
 def _extract_card_options(page, card, sort_type, sorting_no):
     records = []
+    display_name_pf = read_pf_display_name(card)
     default_color = core._checked_chip_value(
         card, "option-selector-v2__wrap--color-chip"
     )
@@ -110,6 +208,7 @@ def _extract_card_options(page, card, sort_type, sorting_no):
                 default_color,
                 default_capacity,
                 True,
+                display_name_pf,
             )
         ]
 
@@ -139,6 +238,7 @@ def _extract_card_options(page, card, sort_type, sorting_no):
                 color_name,
                 capacity,
                 color_name == default_color and capacity == default_capacity,
+                display_name_pf,
                 prev_code=prev_code,
             )
             if record.get("sku"):
@@ -284,7 +384,7 @@ def _record_identity(record):
     return (
         sku,
         str(record.get("cardidx", "")),
-        str(record.get("product_color", "")),
+        str(record.get("product_color") or record.get("product_color_pf") or ""),
         str(record.get("capacity", "")),
     )
 
@@ -296,6 +396,7 @@ def _extract_pf_virtual(
     partial_path=None,
     initial_records=None,
     context=None,
+    extract_card_options=None,
 ):
     """Collect a CA-FR virtual grid before each rendered batch is discarded."""
     context = context or {}
@@ -305,8 +406,16 @@ def _extract_pf_virtual(
     if progress and target_cards:
         progress.set_cards(target_cards)
 
-    records = [
+    initial_records = [
         dict(record) for record in (initial_records or []) if not record.get("status")
+    ]
+    records = [
+        record for record in initial_records
+        if str(record.get("sort_type") or "").casefold() == str(sort_type).casefold()
+    ]
+    other_sort_records = [
+        record for record in initial_records
+        if str(record.get("sort_type") or "").casefold() != str(sort_type).casefold()
     ]
     processed = {
         f"cardidx:{record['cardidx']}"
@@ -340,7 +449,8 @@ def _extract_pf_virtual(
                     sorting_no = int(snapshot.get("cardidx")) + 1
                 except (TypeError, ValueError):
                     sorting_no = len(processed) + 1
-                card_records = _extract_card_options(
+                extractor = extract_card_options or _extract_card_options
+                card_records = extractor(
                     page,
                     card,
                     sort_type,
@@ -377,7 +487,7 @@ def _extract_pf_virtual(
             new_cards += 1
 
         if partial_path and new_cards:
-            _write_json(partial_path, records)
+            _write_json(partial_path, other_sort_records + records)
 
         print(
             f"[scroll] batch={batch} visible={len(snapshots)} "
@@ -408,7 +518,7 @@ def _extract_pf_virtual(
     for record in records:
         record["pf_load_complete"] = complete
     if partial_path:
-        _write_json(partial_path, records)
+        _write_json(partial_path, other_sort_records + records)
     return records, complete, len(processed), target_cards
 
 
@@ -418,6 +528,7 @@ def _scan_category(
     progress=None,
     partial_path=None,
     initial_records=None,
+    extract_card_options=None,
 ):
     core.navigate_to_category(page, category)
     canonical = category.get("canon") or core._canon_url(category.get("href"))
@@ -439,6 +550,9 @@ def _scan_category(
         )
 
     output = []
+    resume_records = [
+        dict(record) for record in (initial_records or []) if not record.get("status")
+    ]
     complete = True
     context = {
         "category": category["name"],
@@ -461,13 +575,24 @@ def _scan_category(
             )
             continue
 
+        combined_initial = {}
+        for record in resume_records + [row for row in output if not row.get("status")]:
+            identity = (
+                str(record.get("sort_type") or "").casefold(),
+                str(record.get("source_pf_url") or canonical),
+                str(record.get("cardidx", "")),
+                _record_identity(record),
+            )
+            combined_initial[identity] = record
+
         extracted, sort_complete, seen, target = _extract_pf_virtual(
             page,
             applied,
             progress=progress,
             partial_path=partial_path,
-            initial_records=initial_records,
+            initial_records=list(combined_initial.values()),
             context=context,
+            extract_card_options=extract_card_options,
         )
         complete = complete and sort_complete
         output.extend(extracted)
@@ -486,8 +611,14 @@ def _scan_category(
     return output, complete
 
 
-def run():
+def run(
+    extract_card_options=None,
+    output_transform=None,
+    checkpoint_validator=None,
+    mode="cta-and-pf-card-details",
+):
     log = lambda message: print(message, file=sys.stderr, flush=True)
+    checkpoint_validator = checkpoint_validator or _checkpoint_has_display_names
     results = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel="chrome", headless=True)
@@ -500,7 +631,7 @@ def run():
 
         categories = core.discover_all_categories(page)
         log(
-            f"[info] mode=CTA_ONLY site={core.SITE} "
+            f"[info] mode={mode.upper().replace('-', '_')} site={core.SITE} "
             f"sorts={','.join(code for _, code in core.SORT_SEQUENCE)} "
             f"unique PF candidates={len(categories)}"
         )
@@ -513,6 +644,14 @@ def run():
                 try:
                     with open(checkpoint, encoding="utf-8") as file:
                         records = json.load(file)
+                    if not checkpoint_validator(records):
+                        log(
+                            f"[resume-stale] PF {index}/{len(categories)} "
+                            f"{category['canon']} missing display_name_PF; rescanning"
+                        )
+                        records = None
+                    if records is None:
+                        raise ValueError("old checkpoint schema")
                     results.extend(records)
                     progress.done += 1
                     log(
@@ -528,6 +667,12 @@ def run():
                 try:
                     with open(partial, encoding="utf-8") as file:
                         initial_records = json.load(file)
+                    if not checkpoint_validator(initial_records):
+                        log(
+                            f"[partial-stale] PF {index}/{len(categories)} "
+                            f"{category['canon']} missing display_name_PF; restarting"
+                        )
+                        initial_records = []
                     log(
                         f"[partial] PF {index}/{len(categories)} "
                         f"{category['canon']} existing_records={len(initial_records)}"
@@ -543,6 +688,7 @@ def run():
                     progress=progress,
                     partial_path=partial,
                     initial_records=initial_records,
+                    extract_card_options=extract_card_options,
                 )
                 if complete:
                     status = "ok" if any(not row.get("status") for row in records) else "skip"
@@ -577,19 +723,24 @@ def run():
 
         browser.close()
 
+    output_records = results
+    extra_metadata = {}
+    if output_transform:
+        output_records, extra_metadata = output_transform(results)
     output = {
-        "records": results,
+        "records": output_records,
         "metadata": {
-            "mode": "cta-only",
+            "mode": mode,
             "site": core.SITE,
             "sorts": [code for _, code in core.SORT_SEQUENCE],
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            **extra_metadata,
         },
     }
     output_path = os.environ.get("SAMSUNG_OUTPUT") or f"pf_cta_{core.SITE}.json"
     with open(output_path, "w", encoding="utf-8") as file:
         json.dump(output, file, ensure_ascii=False, indent=2)
-    log(f"[done] records={len(results)} output={output_path}")
+    log(f"[done] records={len(output_records)} output={output_path}")
     return output
 
 

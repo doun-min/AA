@@ -1,0 +1,45 @@
+PF card details v5: sort order and key model
+================================================
+
+The v5 collector retains PF display name and color, and adds:
+- model_code
+- sort_type: recommended or newest
+- sorting_no: one-based card position within that PF and sort
+- key_model_yn: Y only for the SKU selected before any option interaction
+- source_pf_url/category fields so duplicate appearances remain auditable
+
+Run from:
+  cd C:\Users\alseh\.local\bin\AA\DBauto
+
+US:
+  $env:SAMSUNG_SITE="us"
+  $env:SAMSUNG_OUTPUT="pf_card_details_us_v5.json"
+  $env:SAMSUNG_RESUME_DIR="pf_card_details_resume_us_v5"
+  $env:SAMSUNG_SORTS="recommended,newest"
+  $env:SAMSUNG_DEFAULT_ONLY="0"
+  $env:SAMSUNG_MAX_CARDS="0"
+  $env:SAMSUNG_MAX_COMBOS="0"
+  python .\collect_pf_card_details_v5.py
+
+CA:
+  $env:SAMSUNG_SITE="ca"
+  $env:SAMSUNG_OUTPUT="pf_card_details_ca_v5.json"
+  $env:SAMSUNG_RESUME_DIR="pf_card_details_resume_ca_v5"
+  $env:SAMSUNG_SORTS="recommended,newest"
+  $env:SAMSUNG_DEFAULT_ONLY="0"
+  $env:SAMSUNG_MAX_CARDS="0"
+  $env:SAMSUNG_MAX_COMBOS="0"
+  python .\collect_pf_card_details_v5.py
+
+CA-FR:
+  $env:SAMSUNG_SITE="ca_fr"
+  $env:SAMSUNG_OUTPUT="pf_card_details_ca_fr_v5.json"
+  $env:SAMSUNG_RESUME_DIR="pf_card_details_resume_ca_fr_v5"
+  $env:SAMSUNG_SORTS="recommended,newest"
+  $env:SAMSUNG_DEFAULT_ONLY="0"
+  $env:SAMSUNG_MAX_CARDS="0"
+  $env:SAMSUNG_MAX_COMBOS="0"
+  python .\collect_pf_card_details_v5.py
+
+Use a separate PowerShell process for each site. Re-running the same command
+resumes from the site's v5 checkpoint directory. Do not reuse a v4 directory.
