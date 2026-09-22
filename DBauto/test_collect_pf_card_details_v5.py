@@ -28,7 +28,31 @@ class PFCardDetailsV5Tests(unittest.TestCase):
             {("recommended", 3), ("newest", 7)},
         )
         self.assertTrue(all(row["key_model_yn"] == "Y" for row in output))
+        self.assertTrue(all(row["sort_presence"] == "both" for row in output))
         self.assertEqual(metadata["key_model_conflicts"], [])
+        self.assertEqual(metadata["recommended_only_skus"], [])
+        self.assertEqual(metadata["newest_only_skus"], [])
+        self.assertEqual(metadata["both_sort_sku_count"], 1)
+
+    def test_keeps_and_labels_skus_found_in_only_one_sort(self):
+        records = [
+            {
+                "sku": "REC-ONLY", "display_name_pf": "Recommended only",
+                "product_color_pf": "Black", "sort_type": "recommended",
+                "sorting_no": 2, "key_model_yn": "Y", "source_pf_url": "/us/pf",
+            },
+            {
+                "sku": "NEW-ONLY", "display_name_pf": "Newest only",
+                "product_color_pf": "Blue", "sort_type": "newest",
+                "sorting_no": 4, "key_model_yn": "Y", "source_pf_url": "/us/pf",
+            },
+        ]
+        output, metadata = project_v5_records(records)
+        presence = {row["model_code"]: row["sort_presence"] for row in output}
+        self.assertEqual(presence["REC-ONLY"], "recommended_only")
+        self.assertEqual(presence["NEW-ONLY"], "newest_only")
+        self.assertEqual(metadata["recommended_only_skus"], ["REC-ONLY"])
+        self.assertEqual(metadata["newest_only_skus"], ["NEW-ONLY"])
 
     def test_keeps_same_sku_positions_from_different_pf_pages(self):
         records = [

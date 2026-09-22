@@ -7,6 +7,11 @@ The v5 collector retains PF display name and color, and adds:
 - sorting_no: one-based card position within that PF and sort
 - key_model_yn: Y only for the SKU selected before any option interaction
 - source_pf_url/category fields so duplicate appearances remain auditable
+- sort_presence: both, recommended_only, or newest_only
+
+The metadata also lists recommended_only_skus and newest_only_skus. A SKU found
+in only one sort remains in records; the collector never reduces results to the
+intersection of Recommended and Newest.
 
 Run from:
   cd C:\Users\alseh\.local\bin\AA\DBauto
@@ -43,3 +48,10 @@ CA-FR:
 
 Use a separate PowerShell process for each site. Re-running the same command
 resumes from the site's v5 checkpoint directory. Do not reuse a v4 directory.
+
+Add sort-presence fields to JSON created by a collector process that was
+already running before this feature was installed. This does not crawl again:
+
+  python .\annotate_pf_card_details_v5.py `
+    .\pf_card_details_ca_v5.json `
+    .\pf_card_details_ca_fr_v5.json

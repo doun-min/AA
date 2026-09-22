@@ -86,6 +86,39 @@ def _most_common(records, field):
     return Counter(values).most_common(1)[0][0] if values else None
 
 
+def annotate_sort_presence(records, metadata):
+    """Label one-sort SKUs without requiring another PF crawl."""
+    sorts_by_sku = {}
+    for record in records:
+        sku = _normalized_sku(record.get("model_code") or record.get("sku"))
+        sort_type = str(record.get("sort_type") or "").strip().casefold()
+        if sku and sort_type in {"recommended", "newest"}:
+            sorts_by_sku.setdefault(sku, set()).add(sort_type)
+
+    for record in records:
+        sku = _normalized_sku(record.get("model_code") or record.get("sku"))
+        sort_type = str(record.get("sort_type") or "").strip().casefold()
+        sorts = sorts_by_sku.get(sku, set())
+        if sort_type in {"recommended", "newest"}:
+            record["sort_presence"] = (
+                "both" if sorts == {"recommended", "newest"}
+                else f"{sort_type}_only"
+            )
+
+    recommended_skus = {
+        sku for sku, sorts in sorts_by_sku.items() if "recommended" in sorts
+    }
+    newest_skus = {sku for sku, sorts in sorts_by_sku.items() if "newest" in sorts}
+    metadata["recommended_only_skus"] = sorted(recommended_skus - newest_skus)
+    metadata["newest_only_skus"] = sorted(newest_skus - recommended_skus)
+    metadata["both_sort_sku_count"] = len(recommended_skus & newest_skus)
+    return {
+        "recommended_only": len(recommended_skus - newest_skus),
+        "newest_only": len(newest_skus - recommended_skus),
+        "both": len(recommended_skus & newest_skus),
+    }
+
+
 def project_v5_records(records):
     """Keep one auditable SKU observation per PF, sort, and card position."""
     base_records, base_metadata = v4.project_minimal_records(records)
@@ -148,6 +181,7 @@ def project_v5_records(records):
         "key_model_conflicts": key_model_conflicts,
         "key_model_definition": "Y only when SKU equals the untouched initial card SKU",
     }
+    annotate_sort_presence(output, metadata)
     return output, metadata
 
 
