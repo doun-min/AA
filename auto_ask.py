@@ -87,27 +87,14 @@ def close_chat(page) -> None:
         if not click_if_visible(page.get_by_role("button", name="Options", exact=True)):
             raise RuntimeError("대화 종료 메뉴를 찾지 못했습니다.")
     close_menu.click(timeout=10000)
-    # 사이트의 다른 Close 버튼 대신 화면에 표시된 대화상자의 버튼을 우선합니다.
-    close_button = page.get_by_role("dialog").get_by_role("button", name="Close", exact=True)
-    fallback = page.get_by_role("button", name="Close", exact=True)
-    started = time.monotonic()
-    deadline = started + 10
-    while time.monotonic() < deadline:
-        visible = [close_button.nth(i) for i in range(close_button.count())
-                   if close_button.nth(i).is_visible()]
-        if not visible and time.monotonic() - started >= 3:
-            visible = [fallback.nth(i) for i in range(fallback.count())
-                       if fallback.nth(i).is_visible()]
-        if len(visible) > 1:
-            raise RuntimeError("Close 버튼이 여러 개 표시되어 대화 종료 버튼을 구분할 수 없습니다.")
-        if visible:
-            visible[0].click(timeout=10000)
-            page.get_by_role("textbox", name="Ask me anything").wait_for(
-                state="hidden", timeout=10000
-            )
-            return
-        page.wait_for_timeout(200)
-    raise RuntimeError("대화 종료 확인용 Close 버튼을 찾지 못했습니다.")
+    # 팝업의 X 버튼과 구분해 두 클래스를 모두 가진 종료 확인 버튼만 클릭합니다.
+    close_button = page.get_by_role("button", name="Close", exact=True).and_(
+        page.locator("button.popup-btn.popup-btn--primary:visible")
+    )
+    close_button.click(timeout=10000)
+    page.get_by_role("textbox", name="Ask me anything").wait_for(
+        state="hidden", timeout=10000
+    )
 
 
 def run(playwright: Playwright) -> Path:
