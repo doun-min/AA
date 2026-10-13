@@ -78,36 +78,36 @@ def ask_and_get_answer(page, question: str) -> str:
     raise PlaywrightTimeoutError("새 답변의 완료 표시를 기다리는 중 시간이 초과되었습니다.")
 
 
-def reset_chat(page) -> None:
-    """버튼의 위치 대신 명시적인 새 대화 메뉴를 사용합니다."""
-    open_chat_if_needed(page)
-    new_chat = page.get_by_role("button", name=re.compile(r"^New Chat(?: New Chat)?$", re.I))
-    if not new_chat.is_visible():
+def close_chat(page) -> None:
+    """Close Chat 메뉴를 누른 뒤 Close 버튼으로 종료를 확인합니다."""
+    close_menu = page.get_by_role(
+        "button", name=re.compile(r"^Close Chat(?: Close Chat)?$", re.I)
+    )
+    if not close_menu.is_visible():
         if not click_if_visible(page.get_by_role("button", name="Options", exact=True)):
-            raise RuntimeError("대화 초기화 메뉴를 찾지 못했습니다.")
-    if not click_if_visible(new_chat):
-        raise RuntimeError("새 대화 버튼을 찾지 못했습니다.")
-    deadline = time.monotonic() + 10
+            raise RuntimeError("대화 종료 메뉴를 찾지 못했습니다.")
+    close_menu.click(timeout=10000)
+    # 사이트의 다른 Close 버튼 대신 화면에 표시된 대화상자의 버튼을 우선합니다.
+    close_button = page.get_by_role("dialog").get_by_role("button", name="Close", exact=True)
+    fallback = page.get_by_role("button", name="Close", exact=True)
+    started = time.monotonic()
+    deadline = started + 10
     while time.monotonic() < deadline:
-        if page.locator(FEEDBACK_SELECTOR).count() == 0:
-            page.get_by_role("textbox", name="Ask me anything").wait_for(state="visible")
+        visible = [close_button.nth(i) for i in range(close_button.count())
+                   if close_button.nth(i).is_visible()]
+        if not visible and time.monotonic() - started >= 3:
+            visible = [fallback.nth(i) for i in range(fallback.count())
+                       if fallback.nth(i).is_visible()]
+        if len(visible) > 1:
+            raise RuntimeError("Close 버튼이 여러 개 표시되어 대화 종료 버튼을 구분할 수 없습니다.")
+        if visible:
+            visible[0].click(timeout=10000)
+            page.get_by_role("textbox", name="Ask me anything").wait_for(
+                state="hidden", timeout=10000
+            )
             return
         page.wait_for_timeout(200)
-    raise RuntimeError("이전 대화가 초기화되지 않았습니다.")
-
-
-def ensure_fresh_session(page, max_attempts: int = 3) -> None:
-    """이전 대화 흔적이 남아있으면 reset_chat을 반복 시도해서 확실히 새 세션으로 만듦"""
-    for attempt in range(max_attempts):
-        if page.locator(FEEDBACK_SELECTOR).count() == 0:
-            return
-        try:
-            reset_chat(page)
-        except (PlaywrightTimeoutError, RuntimeError):
-            continue
-    if page.locator(FEEDBACK_SELECTOR).count() == 0:
-        return
-    raise RuntimeError("이전 세션 초기화에 반복적으로 실패했습니다.")
+    raise RuntimeError("대화 종료 확인용 Close 버튼을 찾지 못했습니다.")
 
 
 def run(playwright: Playwright) -> Path:
@@ -122,23 +122,15 @@ def run(playwright: Playwright) -> Path:
     try:
         page = context.pages[0] if context.pages else context.new_page()
         page.goto("https://www.samsung.com/uk/")
-        open_chat_if_needed(page)
-        ensure_fresh_session(page)
         for i, question in enumerate(questions):
-            if i:
-                reset_chat(page)
-            for attempt in range(3):
-                try:
-                    answer = ask_and_get_answer(page, question)
-                    break
-                except (PlaywrightTimeoutError, RuntimeError):
-                    if attempt == 2:
-                        raise
-                    # 늦게 도착한 응답이 재시도 결과에 섞이지 않도록 초기화합니다.
-                    reset_chat(page)
+            open_chat_if_needed(page)
+            answer = ask_and_get_answer(page, question)
             results.append({"question": question, "answer": answer})
             save_results(results, filename)
             print(f"[{i + 1}/{len(questions)}] 완료: {question}")
+            close_chat(page)
+            if i < len(questions) - 1:
+                page.reload(wait_until="domcontentloaded")
     finally:
         context.close()
     return filename
