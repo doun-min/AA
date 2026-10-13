@@ -1,3 +1,5 @@
+import argparse
+import json
 import os
 import re
 import time
@@ -133,6 +135,7 @@ def run(playwright: Playwright) -> Path:
         raise ValueError("질문 목록에는 비어 있지 않은 문자열이 필요합니다.")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     filename = OUTPUT_DIR / f"results_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.xlsx"
+    checkpoint = filename.with_suffix(".json")
     results = []
     context = playwright.chromium.launch_persistent_context(
         user_data_dir=str(PROFILE_DIR.resolve()), channel=BROWSER_CHANNEL, headless=HEADLESS,
@@ -143,13 +146,46 @@ def run(playwright: Playwright) -> Path:
         for i, question in enumerate(questions):
             answer = ask_and_get_answer(page, question)
             results.append({"question": question, "answer": answer})
-            save_results(results, filename)
+            save_checkpoint(results, checkpoint)
             print(f"[{i + 1}/{len(questions)}] 완료: {question}")
             close_chat(page)
             if i < len(questions) - 1:
                 page.reload(wait_until="domcontentloaded")
     finally:
         context.close()
+        if results:
+            print(f"중간 결과 JSON: {checkpoint}")
+    # Excel은 모든 질문을 처리한 뒤 한 번만 생성합니다.
+    save_results(results, filename)
+    return filename
+
+
+def save_checkpoint(results, filename: Path) -> None:
+    """완료한 답변을 JSON으로 저장하고 기존 파일을 원자적으로 교체합니다."""
+    temporary = filename.with_suffix(".tmp.json")
+    try:
+        with temporary.open("w", encoding="utf-8") as stream:
+            json.dump(results, stream, ensure_ascii=False, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(filename)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def recover_excel(checkpoint: Path) -> Path:
+    """중단된 실행의 JSON을 읽어 브라우저 접속 없이 Excel을 생성합니다."""
+    with checkpoint.open(encoding="utf-8") as stream:
+        results = json.load(stream)
+    if not isinstance(results, list) or not results or any(
+        not isinstance(row, dict)
+        or any(not isinstance(row.get(key), str) or not row[key].strip()
+               for key in ("question", "answer"))
+        for row in results
+    ):
+        raise ValueError("JSON에 유효한 질문·답변 목록이 없습니다.")
+    filename = checkpoint.with_suffix(".xlsx")
+    save_results(results, filename)
     return filename
 
 
@@ -181,6 +217,12 @@ def save_results(results, filename: Path) -> None:
 
 
 if __name__ == "__main__":
-    with sync_playwright() as playwright:
-        saved_file = run(playwright)
+    parser = argparse.ArgumentParser(description="삼성 챗봇 질문 수집 및 Excel 저장")
+    parser.add_argument("--recover", type=Path, metavar="JSON", help="중간 저장 JSON을 Excel로 복구")
+    args = parser.parse_args()
+    if args.recover is not None:
+        saved_file = recover_excel(args.recover)
+    else:
+        with sync_playwright() as playwright:
+            saved_file = run(playwright)
     print(f"결과 저장: {saved_file}")
