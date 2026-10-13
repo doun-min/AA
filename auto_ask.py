@@ -34,18 +34,45 @@ def click_if_visible(locator, timeout: int = 3000) -> bool:
         return False
 
 
-def open_chat_if_needed(page) -> None:
-    """자동 표시되는 입력창과 버튼으로 여는 챗봇을 모두 기다립니다."""
-    textbox = page.get_by_role("textbox", name="Ask me anything")
-    open_button = page.get_by_role("button", name="Open chat", exact=True)
+def chat_inputs(page):
+    """접근성 이름 또는 placeholder로 챗봇 입력창을 찾습니다."""
+    return page.get_by_role("textbox", name=re.compile(r"Ask me anything", re.I)).or_(
+        page.get_by_placeholder(re.compile(
+            r"Ask me anything|(?:type|enter|write)(?: your| a)? (?:message|question)", re.I
+        ))
+    )
+
+
+def find_editable_chat_input(page):
+    candidates = chat_inputs(page)
+    for i in range(candidates.count()):
+        textbox = candidates.nth(i)
+        if textbox.is_visible() and textbox.is_enabled() and textbox.is_editable():
+            return textbox
+    return None
+
+
+def open_chat_if_needed(page):
+    """입력 가능한 창을 먼저 찾고, 없으면 열기 버튼을 확인합니다."""
     deadline = time.monotonic() + 30
     clicked = False
     while time.monotonic() < deadline:
-        if textbox.is_visible():
-            return
-        if not clicked and open_button.is_visible():
-            open_button.click(timeout=3000)
-            clicked = True
+        textbox = find_editable_chat_input(page)
+        if textbox is not None:
+            return textbox
+        if not clicked:
+            # 입력창이 없을 때만 버튼을 찾으며, 버튼 대기로 입력창 확인을 막지 않습니다.
+            open_buttons = page.get_by_role("button", name="Open chat", exact=True)
+            for i in range(open_buttons.count()):
+                open_button = open_buttons.nth(i)
+                if open_button.is_visible() and open_button.is_enabled():
+                    # 버튼 검사 중 자동으로 입력창이 열렸을 수도 있습니다.
+                    textbox = find_editable_chat_input(page)
+                    if textbox is not None:
+                        return textbox
+                    open_button.click(timeout=3000)
+                    clicked = True
+                    break
         page.wait_for_timeout(200)
     if page.get_by_role("link", name="Continue on WhatsApp", exact=True).count():
         raise RuntimeError(
@@ -58,12 +85,12 @@ def open_chat_if_needed(page) -> None:
 def ask_and_get_answer(page, question: str) -> str:
     if not isinstance(question, str) or not question.strip():
         raise ValueError("질문이 비어 있습니다.")
+    textbox = open_chat_if_needed(page)
     feedback = page.locator(FEEDBACK_SELECTOR)
     answers = page.locator("div.chatbot-main-cont")
     old_feedback_count = feedback.count()
     old_answer_count = answers.count()
-    page.get_by_role("textbox", name="Ask me anything").click()
-    page.get_by_role("textbox", name="Ask me anything").fill(question)
+    textbox.fill(question)
     page.get_by_role("button", name="Send message").click()
 
     # 답변이 완료되면 피드백 툴팁(👍/👎 등)이 노출됨 -> 그걸 완료 신호로 사용
@@ -92,9 +119,13 @@ def close_chat(page) -> None:
         page.locator("button.popup-btn.popup-btn--primary:visible")
     )
     close_button.click(timeout=10000)
-    page.get_by_role("textbox", name="Ask me anything").wait_for(
-        state="hidden", timeout=10000
-    )
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        candidates = chat_inputs(page)
+        if not any(candidates.nth(i).is_visible() for i in range(candidates.count())):
+            return
+        page.wait_for_timeout(200)
+    raise RuntimeError("종료 확인 후에도 챗봇 입력창이 표시되어 있습니다.")
 
 
 def run(playwright: Playwright) -> Path:
@@ -110,7 +141,6 @@ def run(playwright: Playwright) -> Path:
         page = context.pages[0] if context.pages else context.new_page()
         page.goto("https://www.samsung.com/uk/")
         for i, question in enumerate(questions):
-            open_chat_if_needed(page)
             answer = ask_and_get_answer(page, question)
             results.append({"question": question, "answer": answer})
             save_results(results, filename)
