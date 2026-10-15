@@ -1,0 +1,57 @@
+제품 데이터 검색 프로토타입
+==========================
+
+기존 team-chat 서버의 /products 메뉴에서 국가·SKU·제품명·색상 또는
+Specs / Key Features / 제품 설명·리뷰 원문을 검색합니다.
+데이터는 chat.db와 분리된 product_data.db에 저장합니다.
+
+1. 데이터 적재 (서버 PC의 로컬 원본 경로를 읽음)
+
+   cd C:\Users\alseh\.local\bin\AA\team-chat
+   python .\import_product_data.py --data-dir ..\DBauto --countries us,ca,ca_fr
+
+국가별 원본:
+   structured-us.xlsx       + long-values-us.jsonl
+   structured-ca.xlsx       + long-values-ca.jsonl
+   structured-ca-fr.xlsx    + long-values-ca-fr.jsonl
+
+특정 국가만 갱신:
+   python .\import_product_data.py --data-dir ..\DBauto --countries ca
+
+같은 명령을 다시 실행하면 해당 국가만 교체합니다.
+적재 도중 실패하면 그 국가의 기존 데이터는 유지됩니다.
+긴 원문은 내용별로 중복 저장을 방지하고 검색 인덱스를 구성합니다.
+
+2. 서버 실행 (개인 PC에서만 접근)
+
+   $env:CHAT_HOST="127.0.0.1"
+   $env:CHAT_PORT="5011"
+   python .\app.py
+
+인증서가 없으면 http://127.0.0.1:5011/products 에서 로그인 후 이용합니다.
+certs/cert.pem이 있으면 기존 앱 설정에 따라 HTTPS로 접속합니다.
+기존 서버를 사용 중이면 재시작 후 사이드바의 '제품 데이터 검색'으로 이동합니다.
+
+PRODUCT_DB_PATH 환경변수로 DB 파일 위치를 변경할 수 있습니다.
+--db로 다른 위치에 적재한 경우 서버의 PRODUCT_DB_PATH도 같은 경로로 지정합니다.
+
+3. 조회 영역
+
+기본 정보: sr_merged_product / product_spec_basics / product_family_list /
+           product_spec_color / model_price / product_comment_statistics 원본 필드
+Specs: sr_merged_product.product_specification을 분류·항목·값으로 펼쳐 표시
+Key Features: product_spec_basics.feature_json을 제목·본문·각주로 표시
+제품 설명: sr_product_description.content 및 review_text_collection
+
+각 영역에 원본 Excel 경로·시트·행 번호·ctid, 연결 JSONL 경로·행 번호를 표시합니다.
+원문 HTML/Markdown은 텍스트로 표시하며 외부 이미지·영상·링크를 자동 로드하지 않습니다.
+파일 업로드·외부 API 호출·LLM 전송 기능은 없습니다.
+
+기본 검색은 부분 문자열 검색입니다. 긴 본문 검색은 단어 기준의 접두어 검색으로,
+여러 단어를 입력하면 모든 단어가 포함된 문서를 찾습니다.
+한 페이지에 50개를 표시하고 상세 원문은 탭 선택 시 조회합니다.
+Excel 저장 버튼은 현재 검색 조건에 해당하는 전체 제품 목록을 저장합니다.
+국가·SKU·제품명·모델명·색상·카테고리가 포함되며 긴 본문은 웹 상세에서 조회합니다.
+
+신규 메뉴는 기존 로그인 정책을 사용합니다. 0.0.0.0으로 서버를 실행하면
+기존 team-chat과 동일하게 사내망에서도 접근할 수 있습니다.

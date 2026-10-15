@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% block title %}제품 데이터 검색{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/products.css') }}">
+{% endblock %}
+{% block body %}
+<div class="topbar">
+  <div class="topbar-user"><strong>제품 데이터 검색</strong><span class="badge">LOCAL</span></div>
+  <span id="catalog-summary" class="catalog-meta" aria-live="polite"></span>
+</div>
+<main class="catalog-page">
+  <form id="catalog-form" class="catalog-toolbar" role="search">
+    <label>국가<select name="country" id="catalog-country">
+      <option value="">전체 국가</option><option value="us">US</option>
+      <option value="ca">CA</option><option value="ca_fr">CA_FR</option>
+    </select></label>
+    <label>검색 범위<select name="scope" id="catalog-scope">
+      <option value="basic">SKU · 제품명 · 색상</option><option value="all">전체 내용</option>
+      <option value="specs">Specs</option><option value="features">Key Features</option>
+      <option value="description">제품 설명 · 리뷰 원문</option>
+    </select></label>
+    <label class="catalog-query">검색어<input id="catalog-query" name="q" type="search" maxlength="200" autocomplete="off" placeholder="SKU 또는 검색어"></label>
+    <button type="submit" class="btn-primary">검색</button>
+    <button type="button" id="catalog-reset" class="btn-ghost">초기화</button>
+    <button type="button" id="catalog-export" class="btn-ghost">Excel 저장</button>
+  </form>
+  <p id="catalog-error" role="alert" class="error" hidden></p>
+  <div class="catalog-workspace">
+    <section class="catalog-results" aria-label="검색 결과">
+      <div class="catalog-results-heading"><strong id="catalog-result-count" aria-live="polite">검색 중…</strong></div>
+      <div class="catalog-result-scroll">
+        <table class="catalog-table">
+          <thead><tr><th>국가</th><th>SKU / 제품명</th></tr></thead>
+          <tbody id="catalog-results"></tbody>
+        </table>
+        <p class="catalog-empty" id="catalog-no-results" hidden>검색 결과가 없습니다.</p>
+      </div>
+      <div class="catalog-pagination">
+        <button type="button" class="btn-ghost" id="catalog-prev" aria-label="이전 페이지" title="이전 페이지">&#8592;</button>
+        <span id="catalog-page-number">1 / 1</span>
+        <button type="button" class="btn-ghost" id="catalog-next" aria-label="다음 페이지" title="다음 페이지">&#8594;</button>
+      </div>
+    </section>
+    <section class="catalog-detail" aria-label="제품 상세">
+      <header class="catalog-product-heading">
+        <div><span id="catalog-detail-country" class="catalog-meta"></span><h1 id="catalog-detail-name">제품 선택</h1><code id="catalog-detail-sku"></code></div>
+        <button type="button" id="catalog-copy-sku" class="btn-ghost" hidden>SKU 복사</button>
+      </header>
+      <div class="catalog-tabs" role="tablist" aria-label="제품 데이터 영역">
+        <button type="button" id="catalog-tab-basic" role="tab" aria-selected="true" aria-controls="catalog-panel" data-section="basic">기본 정보</button>
+        <button type="button" id="catalog-tab-specs" role="tab" aria-selected="false" aria-controls="catalog-panel" data-section="specs" tabindex="-1">Specs</button>
+        <button type="button" id="catalog-tab-features" role="tab" aria-selected="false" aria-controls="catalog-panel" data-section="features" tabindex="-1">Key Features</button>
+        <button type="button" id="catalog-tab-description" role="tab" aria-selected="false" aria-controls="catalog-panel" data-section="description" tabindex="-1">제품 설명</button>
+      </div>
+      <div id="catalog-panel" role="tabpanel" aria-labelledby="catalog-tab-basic" class="catalog-detail-body">
+        <p class="catalog-empty">선택된 제품이 없습니다.</p>
+      </div>
+    </section>
+  </div>
+  <details class="catalog-imports"><summary>데이터 원본 · 적재 현황</summary><div id="catalog-import-status"></div></details>
+</main>
+<script src="{{ url_for('static', filename='js/products.js') }}"></script>
+{% endblock %}

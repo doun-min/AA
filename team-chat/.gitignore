@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 chat.db
+product_data.db*
+.runtime/
 static/uploads/*
 !static/uploads/.gitkeep
 log_backups/*

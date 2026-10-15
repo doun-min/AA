@@ -24,6 +24,7 @@ def create_app():
     from routes.schedules import schedules_bp
     from routes.excel import excel_bp
     from routes.issues import issues_bp
+    from routes.products import products_bp
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(rooms_bp)
@@ -32,6 +33,7 @@ def create_app():
     app.register_blueprint(schedules_bp)
     app.register_blueprint(excel_bp)
     app.register_blueprint(issues_bp)
+    app.register_blueprint(products_bp)
 
     @app.context_processor
     def inject_sidebar_context():

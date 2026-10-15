@@ -5,6 +5,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SECRET_KEY = os.environ.get("CHAT_SECRET_KEY", "change-this-secret-key-for-internal-use")
 
 DB_PATH = os.path.join(BASE_DIR, "chat.db")
+PRODUCT_DB_PATH = os.environ.get("PRODUCT_DB_PATH", os.path.join(BASE_DIR, "product_data.db"))
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
