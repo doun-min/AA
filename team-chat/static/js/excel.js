@@ -131,7 +131,7 @@
             const msg =
               `선택한 시트('${data.sheet}')가 없는 파일이 있습니다:\n${list}\n\n` +
               `해당 파일을 제외하고 계속 병합하시겠습니까? (취소를 누르면 병합하지 않습니다)`;
-            if (!confirm(msg)) {
+            if (!(await window.confirmDialog(msg))) {
               mergeStatus.textContent = "병합이 취소되었습니다.";
               return;
             }
@@ -150,7 +150,7 @@
               `기준 파일: ${data.base_file}\n[${(data.base_header || []).join(", ")}]\n\n` +
               `헤더가 다른 파일:\n${lines.join("\n")}\n\n` +
               `기준 파일의 헤더로 강제 병합하시겠습니까? (취소를 누르면 병합하지 않습니다)`;
-            if (!confirm(msg)) {
+            if (!(await window.confirmDialog(msg))) {
               mergeStatus.textContent = "병합이 취소되었습니다.";
               return;
             }
@@ -174,12 +174,7 @@
         mergeInput.value = "";
         resetSheetSelect();
 
-        if (excludedFiles.length === 1) {
-          alert(`${excludedFiles[0]}의 '${excludedSheet}' 시트가 없어 제외하고 병합했습니다.`);
-        } else if (excludedFiles.length > 1) {
-          const list = excludedFiles.map((f) => `- ${f}`).join("\n");
-          alert(`다음 파일에 '${excludedSheet}' 시트가 없어 제외하고 병합했습니다:\n${list}`);
-        }
+        if (excludedFiles.length) mergeStatus.textContent += ` · ${excludedFiles.length}개 파일은 '${excludedSheet}' 시트가 없어 제외했습니다.`;
         return;
       }
     } catch (err) {

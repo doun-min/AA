@@ -12,7 +12,7 @@
     <p class="hint">CSV 파일은 엑셀로, 엑셀 파일은 CSV로 변환합니다.</p>
     <input type="file" id="excel-convert-input" accept=".csv,.xlsx,.xls">
     <button type="button" id="excel-convert-btn" class="btn-secondary">변환 후 다운로드</button>
-    <p id="excel-convert-status" class="hint"></p>
+    <p id="excel-convert-status" class="hint" role="status" aria-live="polite"></p>
   </div>
   <div class="excel-section">
     <h3>다중 파일 병합</h3>
@@ -23,7 +23,7 @@
       <select id="excel-merge-sheet-select"></select>
     </label>
     <button type="button" id="excel-merge-btn" class="btn-secondary">병합 후 다운로드</button>
-    <p id="excel-merge-status" class="hint"></p>
+    <p id="excel-merge-status" class="hint" role="status" aria-live="polite"></p>
   </div>
 </div>
 

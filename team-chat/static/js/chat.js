@@ -122,7 +122,7 @@
   function openImageModal(src, filename) {
     imageModalImg.src = src;
     imageModalImg.alt = filename || "";
-    imageModalDownload.href = src;
+    imageModalDownload.href = src + (src.includes("?") ? "&" : "?") + "download=1";
     imageModalDownload.download = filename || "";
     imageModal.hidden = false;
   }
@@ -146,7 +146,8 @@
     if (e.key === "Escape" && !imageModal.hidden) closeImageModal();
   });
 
-  function appendMessage(msg) {
+  function appendMessage(msg, prepend = false) {
+    if (messagesEl.querySelector(`.message[data-msg-id="${Number(msg.id)}"]`)) return;
     const div = document.createElement("div");
     const mine = msg.sender === nickname;
     div.className = "message type-" + msg.type + (mine ? " me" : "");
@@ -154,6 +155,8 @@
 
     if (msg.type === "system") {
       div.innerHTML = `<div class="system-text">${escapeHtml(msg.content)}</div>`;
+    } else if (msg.deleted_at) {
+      div.innerHTML = `<div class="msg-meta"><span class="msg-sender">${escapeHtml(msg.sender)}</span></div><div class="msg-body msg-body-deleted">삭제된 메시지입니다.</div>`;
     } else {
       const time = (msg.created_at || "").replace("T", " ").split("+")[0];
       let body;
@@ -180,8 +183,14 @@
         `<div class="msg-reactors-detail" hidden></div>`;
       bindImageFallback(div);
     }
-    messagesEl.appendChild(div);
-    scrollToBottom();
+    if (prepend) messagesEl.prepend(div);
+    else messagesEl.appendChild(div);
+    if (msg.reactions && !msg.deleted_at) {
+      (msg.my_reactions || []).forEach((key) => getMyReactionSet(msg.id).add(key));
+      renderReactions(div, msg.reactions, msg.reaction_users || {});
+    }
+    if (!prepend) scrollToBottom();
+    return div;
   }
 
   function updateUnreadBadge(msgId, count) {
@@ -491,10 +500,6 @@
   });
 
   const scheduleBanner = document.getElementById("schedule-banner");
-  function todayStr() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }
   async function refreshScheduleBanner() {
     if (!scheduleBanner) return;
     try {
@@ -505,9 +510,7 @@
       /* ignore */
     }
   }
-  socket.on("schedule_updated", (data) => {
-    if (data.date === todayStr()) refreshScheduleBanner();
-  });
+  socket.on("schedule_updated", refreshScheduleBanner);
 
   socket.on("mention", (data) => {
     // 백그라운드 상태(창 비활성/최소화 등)라면 notify.js가 OS 알림 + 탭 배지를 담당하므로
@@ -668,24 +671,152 @@
     closeMentionSuggest();
   });
 
-  async function uploadFile(file) {
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
+  const olderButton = document.getElementById("load-older-messages");
+  const searchInput = document.getElementById("chat-search");
+  const searchButton = document.getElementById("chat-search-button");
+  const latestButton = document.getElementById("chat-latest-button");
+  const searchResults = document.getElementById("chat-search-results");
+
+  olderButton.addEventListener("click", async () => {
+    const first = messagesEl.querySelector(".message[data-msg-id]");
+    if (!first) return;
+    olderButton.disabled = true;
+    const beforeHeight = messagesEl.scrollHeight;
     try {
-      const res = await fetch(`/api/rooms/${roomId}/upload`, { method: "POST", body: formData });
+      const res = await fetch(`/api/rooms/${roomId}/messages?before=${first.dataset.msgId}`);
       const data = await res.json();
-      if (!res.ok) {
-        showToast(data.error || "업로드에 실패했습니다.");
-      }
+      if (!res.ok) throw new Error(data.error || "이전 메시지를 불러오지 못했습니다.");
+      [...data.messages].reverse().forEach((msg) => appendMessage(msg, true));
+      messagesEl.scrollTop += messagesEl.scrollHeight - beforeHeight;
+      olderButton.hidden = !data.has_more;
     } catch (err) {
-      showToast("업로드 중 오류가 발생했습니다.");
+      showToast(err.message);
+    } finally {
+      olderButton.disabled = false;
+    }
+  });
+
+  async function searchChat() {
+    const query = searchInput.value.trim();
+    if (!query) {
+      searchResults.hidden = true;
+      return;
+    }
+    searchButton.disabled = true;
+    searchResults.hidden = false;
+    searchResults.textContent = "검색 중…";
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/messages/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "검색하지 못했습니다.");
+      searchResults.replaceChildren();
+      if (!data.messages.length) {
+        searchResults.textContent = "검색 결과가 없습니다.";
+        return;
+      }
+      data.messages.forEach((msg) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chat-search-result";
+        button.dataset.messageId = msg.id;
+        button.textContent = `${msg.sender} · ${msg.created_at.slice(0, 16).replace("T", " ")} · ${msg.content.slice(0, 100)}`;
+        searchResults.appendChild(button);
+      });
+    } catch (err) {
+      searchResults.textContent = err.message;
+    } finally {
+      searchButton.disabled = false;
     }
   }
+  searchButton.addEventListener("click", searchChat);
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); searchChat(); }
+  });
+  searchResults.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-message-id]");
+    if (!button) return;
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/messages/${button.dataset.messageId}/context`);
+      const data = await res.json();
+      if (!res.ok) throw new Error("대화 위치를 열지 못했습니다.");
+      messagesEl.replaceChildren();
+      data.messages.forEach((msg) => appendMessage(msg));
+      messagesEl.querySelector(`.message[data-msg-id="${button.dataset.messageId}"]`)?.scrollIntoView({ block: "center" });
+      searchResults.hidden = true;
+      latestButton.hidden = false;
+      olderButton.hidden = !data.messages.length;
+    } catch (err) {
+      showToast(err.message);
+    }
+  });
+  latestButton.addEventListener("click", () => window.location.reload());
 
-  attachBtn.addEventListener("click", () => fileInput.click());
+  const uploadStatus = document.getElementById("upload-status");
+  const maxFileSize = Number(page.dataset.maxFileSize);
+  const allowedExtensions = new Set(JSON.parse(page.dataset.allowedExtensions || "[]"));
+  let uploading = false;
+
+  async function uploadFiles(files) {
+    if (uploading || !files.length) return;
+    uploading = true;
+    attachBtn.disabled = true;
+    uploadStatus.hidden = false;
+    uploadStatus.replaceChildren();
+    for (const file of files) {
+      const status = document.createElement("div");
+      status.className = "upload-status-item";
+      const icon = document.createElement("span");
+      icon.className = "upload-status-icon";
+      icon.innerHTML = '<svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/></svg>';
+      const name = document.createElement("span");
+      name.className = "upload-status-name";
+      name.textContent = file.name;
+      const result = document.createElement("span");
+      result.className = "upload-status-result";
+      result.textContent = "검사 중";
+      status.append(icon, name, result);
+      uploadStatus.appendChild(status);
+      const ext = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+      if (!allowedExtensions.has(ext)) {
+        result.textContent = `전송 실패 · .${ext || "확장자 없음"} 형식은 허용되지 않습니다.`;
+        status.classList.add("failed");
+        continue;
+      }
+      if (file.size > maxFileSize) {
+        result.textContent = "전송 실패 · 파일 크기는 50MB 이하여야 합니다.";
+        status.classList.add("failed");
+        continue;
+      }
+      result.textContent = "전송 중";
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/upload`, { method: "POST", body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          result.textContent = res.status === 413
+            ? "전송 실패 · 파일 또는 요청 크기가 제한을 넘었습니다."
+            : `전송 실패 · ${data.error || `서버 오류 (${res.status})`}`;
+          status.classList.add("failed");
+          continue;
+        }
+        result.textContent = "전송 완료";
+        if (data.message) {
+          appendMessage(data.message);
+          latestMessageId = Math.max(latestMessageId, Number(data.message.id));
+        }
+      } catch (err) {
+        result.textContent = "전송 실패 · 연결 상태를 확인하고 다시 시도해주세요.";
+        status.classList.add("failed");
+      }
+    }
+    uploading = false;
+    attachBtn.disabled = false;
+  }
+
+  attachBtn.addEventListener("click", () => { if (!uploading) fileInput.click(); });
   fileInput.addEventListener("change", async () => {
-    await uploadFile(fileInput.files[0]);
+    await uploadFiles(Array.from(fileInput.files));
     fileInput.value = "";
   });
 
@@ -722,8 +853,7 @@
     e.preventDefault();
     dragCounter = 0;
     page.classList.remove("drag-over");
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    await uploadFile(file);
+    await uploadFiles(Array.from(e.dataTransfer.files || []));
   });
 
   if (deleteBtn) {

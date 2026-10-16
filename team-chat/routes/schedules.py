@@ -1,3 +1,6 @@
+from datetime import date, time
+import re
+
 from flask import Blueprint, abort, jsonify, request, session
 
 import db
@@ -49,6 +52,18 @@ def _validate_body(body, require_all=True):
         return None, "시작 일자를 선택해주세요."
     if require_all and not end_date_str:
         return None, "종료 일자를 선택해주세요."
+    try:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", end_date_str):
+            raise ValueError("invalid date format")
+        date.fromisoformat(date_str)
+        date.fromisoformat(end_date_str)
+        for value in (start_time, end_time):
+            if value:
+                if not re.fullmatch(r"\d{2}:\d{2}", value):
+                    raise ValueError("invalid time format")
+                time.fromisoformat(value)
+    except ValueError:
+        return None, "날짜 또는 시간이 올바르지 않습니다."
     if date_str and end_date_str and end_date_str < date_str:
         return None, "종료 일시가 시작 일시보다 빠를 수 없습니다."
     if date_str and end_date_str and date_str == end_date_str and start_time and end_time and end_time < start_time:
@@ -98,7 +113,7 @@ def create_schedule():
         nickname, data["category"], data["title"], data["date"],
         data["end_date"], data["start_time"], data["end_time"],
     )
-    socketio.emit("schedule_updated", {"date": schedule["date"]})
+    socketio.emit("schedule_updated", {})
     return jsonify(schedule=schedule), 201
 
 
@@ -116,14 +131,11 @@ def update_schedule(schedule_id):
     if error:
         return jsonify(error=error), 400
 
-    old_date = existing["date"]
     schedule = db.update_schedule(
         schedule_id, data["category"], data["title"], data["date"],
         data["end_date"], data["start_time"], data["end_time"],
     )
-    socketio.emit("schedule_updated", {"date": old_date})
-    if schedule["date"] != old_date:
-        socketio.emit("schedule_updated", {"date": schedule["date"]})
+    socketio.emit("schedule_updated", {})
     return jsonify(schedule=schedule)
 
 
@@ -137,5 +149,5 @@ def delete_schedule(schedule_id):
         return jsonify(error="본인 일정만 삭제할 수 있습니다."), 403
 
     db.delete_schedule(schedule_id)
-    socketio.emit("schedule_updated", {"date": existing["date"]})
+    socketio.emit("schedule_updated", {})
     return jsonify(ok=True)

@@ -200,6 +200,17 @@
   function setEndDate(dateStr) {
     setDateSelects(endYearSelect, endMonthSelect, endDaySelect, dateStr);
   }
+  function setSingleDate(dateStr) {
+    setStartDate(dateStr);
+    setEndDate(dateStr);
+  }
+  document.getElementById("sched-quick-today").addEventListener("click", () => setSingleDate(todayStr()));
+  document.getElementById("sched-quick-tomorrow").addEventListener("click", () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setSingleDate(formatDate(tomorrow));
+  });
+  document.getElementById("sched-quick-selected").addEventListener("click", () => setSingleDate(selectedDate));
   [startYearSelect, endYearSelect].forEach(fillYearOptions);
   [startMonthSelect, endMonthSelect].forEach(fillMonthOptions);
   rebuildDayOptions(startDaySelect, Number(startYearSelect.value), Number(startMonthSelect.value));
@@ -519,10 +530,7 @@
 
   const socket = window.ChatNotify && window.ChatNotify.getSocket();
   if (socket) {
-    socket.on("schedule_updated", (data) => {
-      const [y, m] = (data.date || "").split("-").map(Number);
-      if (y === viewYear && m === viewMonth) loadMonth();
-    });
+    socket.on("schedule_updated", () => loadMonth());
   }
 
   loadMonth();

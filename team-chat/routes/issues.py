@@ -90,7 +90,18 @@ def list_issues():
     _require_login()
     subject_id = request.args.get("subject_id", type=int)
     reporter = (request.args.get("reporter") or "").strip() or None
-    return jsonify(issues=db.list_issues(subject_id=subject_id, reporter=reporter))
+    query = (request.args.get("q") or "").strip()
+    if len(query) > 100:
+        return jsonify(error="검색어는 100자 이하로 입력해주세요."), 400
+    page = max(1, request.args.get("page", 1, type=int))
+    issues, total = db.search_issues(subject_id, reporter, query, page)
+    return jsonify(issues=issues, total=total, page=page, page_size=50)
+
+
+@issues_bp.route("/issues/reporters", methods=["GET"])
+def issue_reporters():
+    _require_login()
+    return jsonify(reporters=db.list_issue_reporters())
 
 
 @issues_bp.route("/issues/<int:issue_id>", methods=["GET"])

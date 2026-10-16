@@ -8,7 +8,9 @@ DB_PATH = os.path.join(BASE_DIR, "chat.db")
 PRODUCT_DB_PATH = os.environ.get("PRODUCT_DB_PATH", os.path.join(BASE_DIR, "product_data.db"))
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
-MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 50 * 1024 * 1024
+# multipart 헤더가 파일 크기 제한에 포함되지 않도록 요청에는 여유를 둔다.
+MAX_CONTENT_LENGTH = MAX_FILE_SIZE + 1024 * 1024
 
 # 엑셀 변환(routes/excel.py)은 대용량 CSV/엑셀 파일을 다뤄야 해서 위 전역 제한과
 # 별도로 더 큰 한도를 둔다. (routes/excel.py의 before_request에서 request.max_content_length로 적용)

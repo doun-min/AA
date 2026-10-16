@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, session
+from flask import Flask, abort, jsonify, redirect, request, session, url_for
 
 import auth
 import config
@@ -13,9 +13,27 @@ def create_app():
     app.config["SECRET_KEY"] = config.SECRET_KEY
     app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
 
+    @app.errorhandler(413)
+    def upload_too_large(error):
+        if request.path.startswith("/api/"):
+            return jsonify(error="업로드 요청이 허용 크기를 초과했습니다."), 413
+        return error
+
     os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(config.LOG_BACKUP_FOLDER, exist_ok=True)
     db.init_db()
+
+    @app.before_request
+    def reject_revoked_session():
+        if request.path.startswith("/static/uploads/"):
+            abort(404)
+        nickname = session.get("nickname")
+        if nickname and not db.user_session_valid(nickname, session.get("session_token")):
+            session.clear()
+            if request.path.startswith("/api/") or request.path.startswith("/files/"):
+                abort(401)
+            if request.endpoint != "pages.login_page":
+                return redirect(url_for("pages.login_page"))
 
     from routes.pages import pages_bp
     from routes.rooms import rooms_bp

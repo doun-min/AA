@@ -34,9 +34,15 @@
   <div class="defect-toolbar">
     <select id="filter-subject"><option value="">전체 주제</option></select>
     <select id="filter-reporter"><option value="">전체 담당자</option></select>
+    <input id="filter-query" type="search" maxlength="100" placeholder="TC번호·내용 검색" aria-label="TC번호 또는 이슈 내용 검색">
+    <button type="button" id="filter-search-button" class="btn-secondary">검색</button>
+    <button type="button" id="filter-reset-button" class="btn-ghost">초기화</button>
     <span class="spacer"></span>
+    <span id="issue-result-count" class="hint" aria-live="polite"></span>
   </div>
+  <div class="issue-pagination"><button type="button" id="issue-prev" class="btn-ghost">이전</button><span id="issue-page-label" class="hint"></span><button type="button" id="issue-next" class="btn-ghost">다음</button></div>
   <p id="defect-error" class="error"></p>
+  <p id="defect-status" class="hint" role="status" aria-live="polite"></p>
 
   <div class="issue-table-wrap">
     <table class="issue-table">
@@ -69,7 +75,7 @@
         <button type="button" class="btn-danger" id="issue-delete-btn" hidden>삭제</button>
         <span class="spacer"></span>
         <button type="button" class="btn-ghost" id="issue-cancel-btn">취소</button>
-        <button type="submit" class="btn-secondary">저장</button>
+        <button type="submit" id="issue-save-btn" class="btn-secondary">저장</button>
       </div>
     </form>
   </div>

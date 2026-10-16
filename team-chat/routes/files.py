@@ -25,6 +25,16 @@ def _split_ext(filename):
     return filename.rsplit(".", 1)[-1].lower()
 
 
+def remove_stored_file(room_id, filename):
+    if not filename or os.path.basename(filename) != filename:
+        return
+    path = os.path.join(config.UPLOAD_FOLDER, str(room_id), filename)
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
 @files_bp.route("/api/rooms/<int:room_id>/upload", methods=["POST"])
 def upload_file(room_id):
     nickname = session.get("nickname")
@@ -39,6 +49,12 @@ def upload_file(room_id):
     ext = _split_ext(upload.filename)
     if ext not in config.ALLOWED_EXTENSIONS:
         return jsonify(error="허용되지 않는 파일 형식입니다."), 400
+
+    upload.stream.seek(0, os.SEEK_END)
+    file_size = upload.stream.tell()
+    upload.stream.seek(0)
+    if file_size > config.MAX_FILE_SIZE:
+        return jsonify(error="파일 크기는 50MB 이하로 선택해주세요."), 413
 
     # 원본 파일명은 표시용으로 DB에 그대로 저장하므로, 실제 디스크에 쓰는 이름은
     # 굳이 원본 이름을 남길 필요 없이 무작위 식별자 + 검증된 확장자만 있으면 된다.
@@ -71,14 +87,11 @@ def upload_file(room_id):
     }
     socketio.emit("new_message", payload, room=str(room_id))
 
-    if room["type"] == "direct":
-        # 1:1 방에서 파일/이미지를 보낸 경우에도 상대방 방 목록 배지를 즉시 갱신한다
-        # (텍스트 메시지의 sockets.handle_send_message와 동일한 처리).
-        from sockets import emit_room_badge_counts
+    from sockets import emit_room_badge_counts
 
-        for member in db.get_room_member_nicknames(room_id, "direct"):
-            if member != nickname:
-                emit_room_badge_counts(member)
+    for member in db.get_room_member_nicknames(room_id, room["type"]):
+        if member != nickname:
+            emit_room_badge_counts(member)
 
     return jsonify(message=payload), 201
 
@@ -95,6 +108,9 @@ def get_file(room_id, filename):
     # 이 헤더를 우선시해서 결국 uuid 파일명으로 저장돼버린다. 그래서 DB에 저장해둔
     # 원본 파일명을 명시적으로 넘겨줘야 한다.
     original_filename = db.get_original_filename(room_id, filename)
+    if not original_filename:
+        abort(404)
+    inline_image = _split_ext(filename) in config.IMAGE_EXTENSIONS and request.args.get("download") != "1"
     return send_from_directory(
-        room_dir, filename, as_attachment=True, download_name=original_filename or filename
+        room_dir, filename, as_attachment=not inline_image, download_name=original_filename
     )

@@ -37,10 +37,11 @@ def login_page():
     if not auth.try_register_nickname(nickname):
         return render_template("login.html", error="이미 사용 중인 닉네임입니다.")
 
-    db.upsert_user_login(nickname)
+    token = db.upsert_user_login(nickname)
 
     session.clear()
     session["nickname"] = nickname
+    session["session_token"] = token
     session.permanent = True
 
     from sockets import broadcast_active_users
@@ -53,6 +54,9 @@ def login_page():
 def logout():
     nickname = session.get("nickname")
     if nickname:
+        from sockets import disconnect_nickname
+
+        disconnect_nickname(nickname)
         auth.release_nickname(nickname)
 
         from sockets import broadcast_active_users
@@ -232,4 +236,7 @@ def chat_page(room_id):
         reaction_counts=reaction_counts,
         reaction_users=reaction_users,
         my_reactions=my_reactions,
+        allowed_extensions=sorted(config.ALLOWED_EXTENSIONS),
+        allowed_accept=",".join(f".{ext}" for ext in sorted(config.ALLOWED_EXTENSIONS)),
+        max_file_size=config.MAX_FILE_SIZE,
     )

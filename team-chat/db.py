@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS users (
     nickname TEXT PRIMARY KEY,
     first_login_at TEXT NOT NULL,
     last_login_at TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin'))
+    role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member','admin')),
+    session_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS rooms (
@@ -249,6 +251,8 @@ def init_db():
         columns = {row["name"] for row in cur.fetchall()}
         if "role" not in columns:
             cur.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
+        if "session_token" not in columns:
+            cur.execute("ALTER TABLE users ADD COLUMN session_token TEXT")
         cur.execute("SELECT id FROM rooms WHERE type='global' LIMIT 1")
         if cur.fetchone() is None:
             cur.execute(
@@ -272,15 +276,26 @@ def init_db():
 
 def upsert_user_login(nickname):
     now = _now()
+    token = secrets.token_urlsafe(32)
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO users (nickname, first_login_at, last_login_at) VALUES (?,?,?) "
-            "ON CONFLICT(nickname) DO UPDATE SET last_login_at=excluded.last_login_at",
-            (nickname, now, now),
+            "INSERT INTO users (nickname, first_login_at, last_login_at, session_token) VALUES (?,?,?,?) "
+            "ON CONFLICT(nickname) DO UPDATE SET last_login_at=excluded.last_login_at, "
+            "session_token=excluded.session_token",
+            (nickname, now, now, token),
         )
         # 새 사용자가 로그인하면 방을 한 번도 열지 않아도 모든 공개방의 참여자로
         # 바로 등록해, @전체 멘션과 참여 인원 목록에 즉시 반영되도록 한다.
         _sync_public_room_participants(cur)
+    return token
+
+
+def user_session_valid(nickname, token):
+    if not nickname or not token:
+        return False
+    with db_cursor() as cur:
+        cur.execute("SELECT 1 FROM users WHERE nickname=? AND session_token=?", (nickname, token))
+        return cur.fetchone() is not None
 
 
 def list_all_users():
@@ -501,7 +516,7 @@ def add_message(room_id, sender, type_, content=None, file_path=None, original_f
 def get_original_filename(room_id, file_path):
     with db_cursor() as cur:
         cur.execute(
-            "SELECT original_filename FROM messages WHERE room_id=? AND file_path=?",
+            "SELECT original_filename FROM messages WHERE room_id=? AND file_path=? AND deleted_at IS NULL",
             (room_id, file_path),
         )
         row = cur.fetchone()
@@ -543,13 +558,13 @@ def clear_room_messages_in_range(room_id, start_date, end_date):
         return cur.rowcount
 
 
-def list_messages(room_id, limit=200):
+def list_messages(room_id, limit=200, before_id=None):
     with db_cursor() as cur:
         if limit:
             cur.execute(
-                "SELECT * FROM (SELECT * FROM messages WHERE room_id=? ORDER BY id DESC LIMIT ?) "
+                "SELECT * FROM (SELECT * FROM messages WHERE room_id=? AND (? IS NULL OR id<?) ORDER BY id DESC LIMIT ?) "
                 "sub ORDER BY sub.id ASC",
-                (room_id, limit),
+                (room_id, before_id, before_id, limit),
             )
         else:
             cur.execute("SELECT * FROM messages WHERE room_id=? ORDER BY id ASC", (room_id,))
@@ -609,8 +624,11 @@ def get_messages_unread_counts(room_id, message_ids):
         senders = {r["id"]: r["sender"] for r in cur.fetchall()}
         cur.execute(
             f"SELECT message_id, COUNT(DISTINCT user_id) AS c FROM message_reads "
-            f"WHERE message_id IN ({placeholders}) GROUP BY message_id",
-            message_ids,
+            f"WHERE message_id IN ({placeholders}) AND user_id IN "
+            f"(SELECT nickname FROM direct_participants WHERE room_id=? UNION "
+            f"SELECT nickname FROM room_participants WHERE room_id=?) "
+            f"GROUP BY message_id",
+            message_ids + [room_id, room_id],
         )
         read_counts = {r["message_id"]: r["c"] for r in cur.fetchall()}
 
@@ -622,8 +640,8 @@ def get_messages_unread_counts(room_id, message_ids):
     return result
 
 
-def list_messages_with_unread(room_id, limit=200):
-    messages = list_messages(room_id, limit=limit)
+def list_messages_with_unread(room_id, limit=200, before_id=None):
+    messages = list_messages(room_id, limit=limit, before_id=before_id)
     if not messages:
         return messages
     non_system_ids = [m["id"] for m in messages if m["type"] != "system"]
@@ -631,6 +649,29 @@ def list_messages_with_unread(room_id, limit=200):
     for m in messages:
         m["unread_count"] = counts.get(m["id"], 0)
     return messages
+
+
+def search_room_messages(room_id, query, limit=50):
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT id, sender, content, created_at FROM messages "
+            "WHERE room_id=? AND type='text' AND deleted_at IS NULL "
+            "AND content LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?",
+            (room_id, f"%{escaped}%", limit),
+        )
+        return [dict(row) for row in cur.fetchall()]
+
+
+def list_messages_around(room_id, message_id, side_limit=50):
+    with db_cursor() as cur:
+        cur.execute("SELECT * FROM messages WHERE room_id=? AND id<=? ORDER BY id DESC LIMIT ?",
+                    (room_id, message_id, side_limit))
+        before = [dict(row) for row in cur.fetchall()][::-1]
+        cur.execute("SELECT * FROM messages WHERE room_id=? AND id>? ORDER BY id ASC LIMIT ?",
+                    (room_id, message_id, side_limit))
+        after = [dict(row) for row in cur.fetchall()]
+    return before + after
 
 
 REACTION_TYPES = ("o", "x", "like", "dislike", "check")
@@ -962,3 +1003,31 @@ def list_issues(subject_id=None, reporter=None):
     with db_cursor() as cur:
         cur.execute(query, params)
         return [_issue_row_to_dict(r) for r in cur.fetchall()]
+
+
+def list_issue_reporters():
+    with db_cursor() as cur:
+        cur.execute("SELECT DISTINCT reporter FROM issues ORDER BY reporter COLLATE NOCASE")
+        return [row["reporter"] for row in cur.fetchall()]
+
+
+def search_issues(subject_id=None, reporter=None, query="", page=1, page_size=50):
+    clauses, params = [], []
+    if subject_id:
+        clauses.append("subject_id=?")
+        params.append(subject_id)
+    if reporter:
+        clauses.append("reporter=?")
+        params.append(reporter)
+    if query:
+        escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        clauses.append("(tc_num LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' OR steps_to_reproduce LIKE ? ESCAPE '\\')")
+        params.extend([f"%{escaped}%"] * 3)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    with db_cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM issues" + where, params)
+        total = cur.fetchone()[0]
+        cur.execute("SELECT * FROM issues" + where + " ORDER BY id DESC LIMIT ? OFFSET ?",
+                    params + [page_size, (page - 1) * page_size])
+        issues = [_issue_row_to_dict(row) for row in cur.fetchall()]
+    return issues, total

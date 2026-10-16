@@ -16,6 +16,23 @@
   const noUsersHint = document.getElementById("new-room-no-users-hint");
   const directPeopleList = document.getElementById("direct-people-list");
   const groupRoomList = document.getElementById("group-room-list");
+  const roomSearch = document.getElementById("room-search");
+  const roomUnreadOnly = document.getElementById("room-unread-only");
+  const peopleSearch = document.getElementById("people-search");
+
+  function filterRoomLists() {
+    document.querySelectorAll("#group-room-list > .room-item").forEach((item) => {
+      const name = item.querySelector(".room-name")?.textContent || "";
+      const badge = item.querySelector(".badge-count");
+      item.hidden = !name.toLocaleLowerCase().includes((roomSearch?.value || "").trim().toLocaleLowerCase())
+        || (!!roomUnreadOnly?.checked && (!badge || badge.hidden));
+    });
+    document.querySelectorAll("#direct-people-list > .room-item").forEach((item) => {
+      item.hidden = !(item.dataset.nickname || "").toLocaleLowerCase().includes((peopleSearch?.value || "").trim().toLocaleLowerCase());
+    });
+  }
+  [roomSearch, peopleSearch].forEach((input) => input?.addEventListener("input", filterRoomLists));
+  roomUnreadOnly?.addEventListener("change", filterRoomLists);
 
   const selectedMembers = new Set();
   // 방 생성 초대 후보(DB에 등록된 전체 사용자)의 최신 온라인 상태를 기억해뒀다가
@@ -265,6 +282,7 @@
       if (!freshList) throw new Error("group-room-list not found");
       document.getElementById("group-room-list").replaceWith(freshList);
       bindDeleteButtons();
+      filterRoomLists();
     } catch (err) {
       // 부분 갱신이 실패하면 예전처럼 전체 새로고침으로 안전하게 폴백한다.
       window.location.reload();
@@ -286,6 +304,7 @@
       if (!freshList) throw new Error("direct-people-list not found");
       document.getElementById("direct-people-list").replaceWith(freshList);
       document.querySelectorAll(".btn-dm").forEach(bindDmButton);
+      filterRoomLists();
     } catch (err) {
       // 부분 갱신이 실패해도 다음 이벤트나 새로고침에서 자연스럽게 맞춰지므로 조용히 넘어간다.
     }
@@ -310,10 +329,12 @@
         }
       });
       scheduleDirectPeopleRefresh();
+      filterRoomLists();
     });
 
     socket.on("room_member_added", refreshGroupRoomsPanel);
     socket.on("room_member_removed", refreshGroupRoomsPanel);
+    socket.on("room_list_updated", refreshGroupRoomsPanel);
 
     socket.on("active_users_update", (data) => {
       const users = data.users || [];

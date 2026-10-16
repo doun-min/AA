@@ -35,6 +35,17 @@ def broadcast_active_users():
     socketio.emit("active_users_update", {"users": auth.list_active()})
 
 
+def disconnect_nickname(nickname):
+    for sid in list(nickname_to_sids.get(nickname, ())):
+        socketio.server.disconnect(sid, namespace="/")
+
+
+def remove_nickname_from_room(nickname, room_id):
+    for sid in list(nickname_to_sids.get(nickname, ())):
+        socketio.server.leave_room(sid, str(room_id), namespace="/")
+    room_members.get(room_id, set()).discard(nickname)
+
+
 def emit_room_badge_counts(nickname):
     sids = nickname_to_sids.get(nickname)
     if not sids:
@@ -45,7 +56,7 @@ def emit_room_badge_counts(nickname):
     total = sum(room_counts.values())
     payload = {"total": total, "rooms": room_counts}
     for sid in sids:
-        emit("unread_count_update", payload, room=sid)
+        socketio.emit("unread_count_update", payload, room=sid)
 
 
 def _schedule_release(nickname):
@@ -71,7 +82,7 @@ def _schedule_release(nickname):
 @socketio.on("connect")
 def handle_connect():
     nickname = session.get("nickname")
-    if not nickname:
+    if not db.user_session_valid(nickname, session.get("session_token")):
         return False
     _cancel_pending_release(nickname)
     sid_to_nickname[request.sid] = nickname
@@ -180,10 +191,9 @@ def handle_send_message(data):
     # 1:1 방은 멘션 여부와 무관하게 메시지가 오면 방 목록 배지를 띄워야 하므로,
     # 멘션으로 이미 알림을 보낸 상대가 아니라면 여기서 별도로 배지만 갱신한다
     # (OS 알림(emit("mention", ...))은 위 멘션 루프에서만 발생하며 여기서는 건드리지 않는다).
-    if room["type"] == "direct":
-        for member in db.get_room_member_nicknames(room_id, "direct"):
-            if member != nickname and member not in mentioned_names:
-                emit_room_badge_counts(member)
+    for member in db.get_room_member_nicknames(room_id, room["type"]):
+        if member != nickname and member not in mentioned_names:
+            emit_room_badge_counts(member)
 
 
 @socketio.on("mark_read")

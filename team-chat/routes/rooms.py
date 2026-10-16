@@ -1,4 +1,5 @@
 import os
+import shutil
 
 from flask import Blueprint, abort, jsonify, request, session
 
@@ -18,7 +19,13 @@ def _backup_messages_to_file(room, admin_nickname, start_date, end_date, message
         f"===== 삭제일시: {db.now_iso()} | 삭제자: {admin_nickname} | "
         f"방: {room['name']} | 대상 기간: {start_date} ~ {end_date} | {len(messages)}건 ====="
     )
-    lines = [header] + [db.format_message_line(m) for m in messages] + [""]
+    lines = [header]
+    for message in messages:
+        line = db.format_message_line(message)
+        if message["file_path"]:
+            line += f" [백업 파일: room_{room['id']}_files/{message['file_path']}]"
+        lines.append(line)
+    lines.append("")
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -50,6 +57,7 @@ def create_room():
             return jsonify(error=f"등록되지 않은 사용자는 초대할 수 없습니다: {', '.join(invalid)}"), 400
 
     room = db.create_group_room(name, nickname, members, is_private=is_private)
+    socketio.emit("room_list_updated", {})
     for member in members:
         _notify_member(member, "room_member_added", {"room_id": room["id"], "room_name": room["name"]})
     return jsonify(room=room), 201
@@ -77,7 +85,10 @@ def delete_room(room_id):
         return jsonify(error="방을 삭제할 권한이 없습니다."), 403
 
     db.delete_room(room_id)
+    room_uploads = os.path.join(config.UPLOAD_FOLDER, str(room_id))
+    shutil.rmtree(room_uploads, ignore_errors=True)
     socketio.emit("room_deleted", {"room_id": room_id}, room=str(room_id))
+    socketio.emit("room_list_updated", {})
     return jsonify(ok=True)
 
 
@@ -178,6 +189,9 @@ def remove_room_member(room_id, target_nickname):
     )
     socketio.emit("room_member_removed", {"room_id": room_id, "nickname": target_nickname}, room=str(room_id))
     _notify_member(target_nickname, "room_member_removed", {"room_id": room_id, "room_name": room["name"]})
+    from sockets import remove_nickname_from_room
+
+    remove_nickname_from_room(target_nickname, room_id)
     return jsonify(ok=True)
 
 
@@ -197,6 +211,64 @@ def start_direct_room():
 def active_users():
     nickname = _require_login()
     return jsonify(users=[u for u in auth.list_active() if u != nickname])
+
+
+def _room_for_reader(room_id):
+    nickname = _require_login()
+    room = db.get_room(room_id)
+    if not room:
+        abort(404)
+    if not db.can_access_room(room, nickname):
+        abort(403)
+    return nickname
+
+
+def _enrich_messages(messages, nickname):
+    ids = [m["id"] for m in messages if m["type"] != "system"]
+    unread = db.get_messages_unread_counts(messages[0]["room_id"], ids) if messages else {}
+    counts = db.get_message_reaction_counts(ids)
+    reactors = db.get_message_reactions_grouped(ids)
+    mine = db.get_message_reactions_by_user(ids, nickname)
+    for msg in messages:
+        if msg["deleted_at"]:
+            msg["content"] = None
+            msg["file_path"] = None
+            msg["original_filename"] = None
+        msg["unread_count"] = unread.get(msg["id"], 0)
+        msg["reactions"] = counts.get(msg["id"], {})
+        msg["reaction_users"] = reactors.get(msg["id"], {})
+        msg["my_reactions"] = mine.get(msg["id"], [])
+    return messages
+
+
+@rooms_bp.route("/rooms/<int:room_id>/messages", methods=["GET"])
+def older_messages(room_id):
+    nickname = _room_for_reader(room_id)
+    before = request.args.get("before", type=int)
+    if before is None or before < 1:
+        return jsonify(error="기준 메시지가 올바르지 않습니다."), 400
+    messages = db.list_messages(room_id, limit=101, before_id=before)
+    has_more = len(messages) > 100
+    return jsonify(messages=_enrich_messages(messages[-100:], nickname), has_more=has_more)
+
+
+@rooms_bp.route("/rooms/<int:room_id>/messages/search", methods=["GET"])
+def search_messages(room_id):
+    _room_for_reader(room_id)
+    query = (request.args.get("q") or "").strip()
+    if not query or len(query) > 100:
+        return jsonify(error="검색어는 1~100자로 입력해주세요."), 400
+    return jsonify(messages=db.search_room_messages(room_id, query))
+
+
+@rooms_bp.route("/rooms/<int:room_id>/messages/<int:message_id>/context", methods=["GET"])
+def message_context(room_id, message_id):
+    nickname = _room_for_reader(room_id)
+    msg = db.get_message(message_id)
+    if not msg or msg["room_id"] != room_id:
+        abort(404)
+    messages = db.list_messages_around(room_id, message_id)
+    return jsonify(messages=_enrich_messages(messages, nickname))
 
 
 @rooms_bp.route("/all_users")
@@ -219,7 +291,7 @@ def toggle_message_reaction(message_id):
         return jsonify(error="올바르지 않은 반응입니다."), 400
 
     msg = db.get_message(message_id)
-    if not msg or msg["type"] == "system":
+    if not msg or msg["type"] == "system" or msg["deleted_at"]:
         abort(404)
     room = db.get_room(msg["room_id"])
     if not room or not db.can_access_room(room, nickname):
@@ -259,11 +331,21 @@ def delete_message(message_id):
         db.hard_delete_message(message_id)
     else:
         db.delete_message(message_id)
+    if msg["file_path"]:
+        from routes.files import remove_stored_file
+
+        remove_stored_file(msg["room_id"], msg["file_path"])
     socketio.emit(
         "message_deleted",
         {"message_id": message_id, "room_id": msg["room_id"], "hard": hard},
         room=str(msg["room_id"]),
     )
+    from sockets import emit_room_badge_counts
+
+    room = db.get_room(msg["room_id"])
+    if room:
+        for member in db.get_room_member_nicknames(room["id"], room["type"]):
+            emit_room_badge_counts(member)
     return jsonify(ok=True)
 
 
@@ -289,9 +371,24 @@ def clear_room_log(room_id):
     if not messages:
         return jsonify(error="해당 기간에 삭제할 로그가 없습니다."), 400
 
+    backup_files = os.path.join(config.LOG_BACKUP_FOLDER, f"room_{room_id}_files")
+    for msg in messages:
+        if msg["file_path"]:
+            source = os.path.join(config.UPLOAD_FOLDER, str(room_id), msg["file_path"])
+            if os.path.isfile(source):
+                os.makedirs(backup_files, exist_ok=True)
+                shutil.copy2(source, os.path.join(backup_files, msg["file_path"]))
     _backup_messages_to_file(room, nickname, start_date, end_date, messages)
     deleted_ids = [m["id"] for m in messages]
     db.clear_room_messages_in_range(room_id, start_date, end_date)
+    from routes.files import remove_stored_file
+
+    for msg in messages:
+        remove_stored_file(room_id, msg["file_path"])
+    from sockets import emit_room_badge_counts
+
+    for member in db.get_room_member_nicknames(room_id, room["type"]):
+        emit_room_badge_counts(member)
 
     text = f"{nickname}님이 {start_date} ~ {end_date} 기간의 로그({len(deleted_ids)}건)를 삭제했습니다."
     sys_msg = db.add_message(room_id, nickname, "system", content=text)
@@ -323,9 +420,12 @@ def delete_user(nickname):
     if auth.is_admin(nickname):
         return jsonify(error="관리자 계정은 삭제할 수 없습니다."), 400
 
-    db.delete_user_account(nickname)
-    auth.release_nickname(nickname)
     _notify_member(nickname, "account_deleted", {})
+    db.delete_user_account(nickname)
+    from sockets import disconnect_nickname
+
+    disconnect_nickname(nickname)
+    auth.release_nickname(nickname)
     socketio.emit("user_account_deleted", {"nickname": nickname})
 
     from sockets import broadcast_active_users

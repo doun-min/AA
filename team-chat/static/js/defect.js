@@ -5,9 +5,18 @@
 
   const filterSubject = document.getElementById("filter-subject");
   const filterReporter = document.getElementById("filter-reporter");
+  const filterQuery = document.getElementById("filter-query");
+  const filterSearchButton = document.getElementById("filter-search-button");
+  const filterResetButton = document.getElementById("filter-reset-button");
+  const resultCount = document.getElementById("issue-result-count");
+  const pageLabel = document.getElementById("issue-page-label");
+  const prevPage = document.getElementById("issue-prev");
+  const nextPage = document.getElementById("issue-next");
   const tableHead = document.getElementById("issue-table-head");
   const tableBody = document.getElementById("issue-table-body");
   const errorEl = document.getElementById("defect-error");
+  const statusEl = document.getElementById("defect-status");
+  const issueSaveBtn = document.getElementById("issue-save-btn");
   const addBtn = document.getElementById("defect-add-btn");
 
   const subjectAddBtn = document.getElementById("subject-add-btn");
@@ -39,6 +48,9 @@
   let subjects = [];
   let fields = [];
   let issues = [];
+  let issuePage = 1;
+  let issuePages = 1;
+  let issueRequest = 0;
 
   function escapeHtml(str) {
     const div = document.createElement("div");
@@ -266,6 +278,8 @@
     const id = issueIdInput.value;
     const url = id ? `/api/issues/${id}` : "/api/issues";
     const method = id ? "PUT" : "POST";
+    issueSaveBtn.disabled = true;
+    issueSaveBtn.textContent = "저장 중";
     try {
       const res = await fetch(url, {
         method,
@@ -279,8 +293,12 @@
       }
       closeModal();
       await loadIssues();
+      statusEl.textContent = id ? "이슈를 수정했습니다." : "이슈를 등록했습니다.";
     } catch (err) {
       formError.textContent = "저장 중 오류가 발생했습니다.";
+    } finally {
+      issueSaveBtn.disabled = false;
+      issueSaveBtn.textContent = "저장";
     }
   });
 
@@ -302,8 +320,21 @@
     }
   });
 
-  filterSubject.addEventListener("change", loadIssues);
-  filterReporter.addEventListener("change", loadIssues);
+  function resetIssuePage() { issuePage = 1; loadIssues(); }
+  filterSubject.addEventListener("change", resetIssuePage);
+  filterReporter.addEventListener("change", resetIssuePage);
+  filterSearchButton.addEventListener("click", resetIssuePage);
+  filterQuery.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); resetIssuePage(); }
+  });
+  filterResetButton.addEventListener("click", () => {
+    filterSubject.value = "";
+    filterReporter.value = "";
+    filterQuery.value = "";
+    resetIssuePage();
+  });
+  prevPage.addEventListener("click", () => { if (issuePage > 1) { issuePage--; loadIssues(); } });
+  nextPage.addEventListener("click", () => { if (issuePage < issuePages) { issuePage++; loadIssues(); } });
 
   if (subjectForm) {
     subjectForm.addEventListener("submit", async (e) => {
@@ -374,9 +405,9 @@
 
   async function refreshReporterOptions() {
     try {
-      const res = await fetch("/api/issues");
+      const res = await fetch("/api/issues/reporters");
       const data = await res.json();
-      const reporters = Array.from(new Set((data.issues || []).map((i) => i.reporter))).sort();
+      const reporters = data.reporters || [];
       const current = filterReporter.value;
       filterReporter.innerHTML = '<option value="">전체 담당자</option>';
       reporters.forEach((r) => {
@@ -392,16 +423,31 @@
   }
 
   async function loadIssues() {
+    const token = ++issueRequest;
     try {
       const params = new URLSearchParams();
       if (filterSubject.value) params.set("subject_id", filterSubject.value);
       if (filterReporter.value) params.set("reporter", filterReporter.value);
+      if (filterQuery.value.trim()) params.set("q", filterQuery.value.trim());
+      params.set("page", issuePage);
       const res = await fetch(`/api/issues?${params.toString()}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "이슈 목록을 불러오지 못했습니다.");
+      if (token !== issueRequest) return;
       issues = data.issues || [];
+      issuePages = Math.max(1, Math.ceil(data.total / data.page_size));
+      if (issuePage > issuePages) {
+        issuePage = issuePages;
+        loadIssues();
+        return;
+      }
+      resultCount.textContent = `${data.total}건`;
+      pageLabel.textContent = `${issuePage} / ${issuePages}`;
+      prevPage.disabled = issuePage <= 1;
+      nextPage.disabled = issuePage >= issuePages;
       renderTableBody();
     } catch (err) {
-      errorEl.textContent = "이슈 목록을 불러오지 못했습니다.";
+      if (token === issueRequest) errorEl.textContent = err.message;
     }
   }
 
