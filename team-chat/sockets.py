@@ -59,6 +59,13 @@ def emit_room_badge_counts(nickname):
         socketio.emit("unread_count_update", payload, room=sid)
 
 
+def emit_sidebar_room_refresh(room_id, room_type):
+    """방을 열지 않은 탭에도 최신 메시지 변경을 알린다."""
+    for member in db.get_room_member_nicknames(room_id, room_type):
+        for sid in list(nickname_to_sids.get(member, ())):
+            socketio.emit("sidebar_rooms_updated", {}, room=sid)
+
+
 def _schedule_release(nickname):
     def _do_release():
         with _timer_lock:
@@ -161,6 +168,7 @@ def handle_send_message(data):
         "unread_count": unread_count,
     }
     emit("new_message", payload, room=str(room_id))
+    emit_sidebar_room_refresh(room_id, room["type"])
 
     mentioned_names = set(MENTION_RE.findall(text)) - {nickname}
     if config.MENTION_ALL in mentioned_names:

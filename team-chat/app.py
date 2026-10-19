@@ -60,8 +60,19 @@ def create_app():
         nickname = session.get("nickname")
         if not nickname:
             return {}
-        total = sum(db.get_unread_message_counts(nickname).values())
-        return {"sidebar_unread_total": total, "is_admin": auth.is_admin(nickname)}
+        rooms = (
+            db.list_sidebar_rooms(nickname, request.view_args.get("room_id"))
+            if request.endpoint == "pages.chat_page" else None
+        )
+        total = (
+            rooms["total_unread"]
+            if rooms else sum(db.get_unread_message_counts(nickname).values())
+        )
+        return {
+            "sidebar_unread_total": total,
+            "sidebar_rooms": rooms,
+            "is_admin": auth.is_admin(nickname),
+        }
 
     socketio.init_app(app, async_mode="threading")
 

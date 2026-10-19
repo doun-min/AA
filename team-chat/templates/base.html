@@ -15,12 +15,12 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 {% block head %}{% endblock %}
 </head>
-<body data-nickname="{{ nickname|default('') }}">
+<body class="{{ 'chat-screen' if request.endpoint == 'pages.chat_page' else '' }}" data-nickname="{{ nickname|default('') }}">
 <script src="{{ url_for('static', filename='js/vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/notify.js') }}"></script>
 <script src="{{ url_for('static', filename='js/scrollbars.js') }}"></script>
 {% if nickname %}
-<button type="button" id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="사이드바 토글">&#9776;</button>
+<button type="button" id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="사이드바 열기" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span id="sidebar-toggle-badge" class="badge-count" {% if not sidebar_unread_total %}hidden{% endif %}>{{ sidebar_unread_total|default(0) }}</span></button>
 <div id="sidebar-backdrop" class="sidebar-backdrop" hidden></div>
 <aside id="sidebar" class="sidebar">
   <div class="sidebar-brand">TEAM CHAT</div>
@@ -28,7 +28,6 @@
     <a class="sidebar-link {{ 'active' if request.endpoint in ('pages.rooms_page', 'pages.chat_page') else '' }}"
        href="{{ url_for('pages.rooms_page') }}">
       채팅
-      <span class="badge-count" id="sidebar-unread-badge" data-count="{{ sidebar_unread_total|default(0) }}" {% if not sidebar_unread_total %}hidden{% endif %}>{{ sidebar_unread_total|default(0) }}</span>
     </a>
     <a class="sidebar-link {{ 'active' if request.endpoint == 'pages.excel_page' else '' }}"
        href="{{ url_for('pages.excel_page') }}">엑셀 변환</a>
@@ -43,12 +42,33 @@
   </nav>
   <button type="button" id="theme-toggle" class="sidebar-theme-toggle">🌙 다크모드</button>
 </aside>
-<script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>
+{% if request.endpoint == 'pages.chat_page' %}
+{% set current_room_id = request.view_args.get('room_id') %}
+<div id="chat-rooms-backdrop" class="chat-rooms-backdrop" hidden></div>
+<aside id="chat-room-rail" class="chat-room-rail" aria-label="대화 목록">
+  <div class="chat-room-rail-header">대화 목록</div>
+  <div id="sidebar-room-list" class="sidebar-room-list" data-current-room-id="{{ current_room_id }}">
+    <section class="sidebar-room-section">
+      <h2>최근 대화 · 최대 8개</h2>
+      {% if sidebar_rooms.rooms %}
+      {% for room in sidebar_rooms.rooms %}
+      <a class="sidebar-room-link {{ 'active' if room.id == current_room_id else '' }}" href="{{ url_for('pages.chat_page', room_id=room.id) }}" {% if room.id == current_room_id %}aria-current="page"{% endif %} data-room-id="{{ room.id }}">
+        <span class="sidebar-room-top"><span class="sidebar-room-name">{{ room.name }}</span><span class="badge-count" {% if not room.unread_count %}hidden{% endif %}>{{ room.unread_count }}</span></span>
+        <span class="sidebar-room-preview" title="{{ room.preview }}">{{ room.preview }}</span>
+      </a>
+      {% endfor %}
+      {% else %}<p class="sidebar-room-empty">최근 대화가 없습니다.</p>{% endif %}
+    </section>
+  </div>
+  <a class="chat-room-all-link" href="{{ url_for('pages.rooms_page') }}">전체 방 보기</a>
+</aside>
+{% endif %}
 <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 {% endif %}
 <div class="app-content">
 {% block body %}{% endblock %}
 </div>
+{% if nickname %}<script src="{{ url_for('static', filename='js/sidebar.js') }}"></script>{% endif %}
 
 <!-- 삭제 등 위험한 동작 확인용 공용 모달. 네이티브 confirm()/prompt()은 데스크톱(Electron)
      앱에서 대화상자를 닫은 뒤 렌더러 입력이 먹통이 되는 경우가 있어, 모든 삭제 확인은

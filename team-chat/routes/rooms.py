@@ -37,6 +37,11 @@ def _require_login():
     return nickname
 
 
+@rooms_bp.route("/sidebar/rooms", methods=["GET"])
+def sidebar_rooms():
+    return jsonify(db.list_sidebar_rooms(_require_login(), request.args.get("current_room_id", type=int)))
+
+
 @rooms_bp.route("/rooms", methods=["POST"])
 def create_room():
     nickname = _require_login()
@@ -156,6 +161,9 @@ def invite_room_member(room_id):
         room=str(room_id),
     )
     _notify_member(target, "room_member_added", {"room_id": room_id, "room_name": room["name"]})
+    from sockets import emit_sidebar_room_refresh
+
+    emit_sidebar_room_refresh(room_id, room["type"])
     return jsonify(ok=True, nickname=target), 201
 
 
@@ -189,9 +197,10 @@ def remove_room_member(room_id, target_nickname):
     )
     socketio.emit("room_member_removed", {"room_id": room_id, "nickname": target_nickname}, room=str(room_id))
     _notify_member(target_nickname, "room_member_removed", {"room_id": room_id, "room_name": room["name"]})
-    from sockets import remove_nickname_from_room
+    from sockets import emit_sidebar_room_refresh, remove_nickname_from_room
 
     remove_nickname_from_room(target_nickname, room_id)
+    emit_sidebar_room_refresh(room_id, room["type"])
     return jsonify(ok=True)
 
 
@@ -204,6 +213,8 @@ def start_direct_room():
     if not auth.is_active(target):
         return jsonify(error="현재 접속 중인 사용자가 아닙니다."), 400
     room = db.get_or_create_direct_room(nickname, target)
+    _notify_member(nickname, "room_list_updated", {})
+    _notify_member(target, "room_list_updated", {})
     return jsonify(room=room), 201
 
 
@@ -344,6 +355,9 @@ def delete_message(message_id):
 
     room = db.get_room(msg["room_id"])
     if room:
+        from sockets import emit_sidebar_room_refresh
+
+        emit_sidebar_room_refresh(room["id"], room["type"])
         for member in db.get_room_member_nicknames(room["id"], room["type"]):
             emit_room_badge_counts(member)
     return jsonify(ok=True)
@@ -392,6 +406,9 @@ def clear_room_log(room_id):
 
     text = f"{nickname}님이 {start_date} ~ {end_date} 기간의 로그({len(deleted_ids)}건)를 삭제했습니다."
     sys_msg = db.add_message(room_id, nickname, "system", content=text)
+    from sockets import emit_sidebar_room_refresh
+
+    emit_sidebar_room_refresh(room_id, room["type"])
     socketio.emit(
         "room_log_cleared",
         {
@@ -427,6 +444,7 @@ def delete_user(nickname):
     disconnect_nickname(nickname)
     auth.release_nickname(nickname)
     socketio.emit("user_account_deleted", {"nickname": nickname})
+    socketio.emit("room_list_updated", {})
 
     from sockets import broadcast_active_users
 

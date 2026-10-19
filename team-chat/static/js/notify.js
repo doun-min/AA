@@ -53,14 +53,14 @@ window.ChatNotify = (function () {
   }
 
   function updateSidebarUnreadBadge(total) {
-    const badge = document.getElementById("sidebar-unread-badge");
-    if (!badge) return;
+    const toggleBadge = document.getElementById("sidebar-toggle-badge");
+    if (!toggleBadge) return;
     if (total > 0) {
-      badge.hidden = false;
-      badge.textContent = total;
+      toggleBadge.hidden = false;
+      toggleBadge.textContent = total;
     } else {
-      badge.hidden = true;
-      badge.textContent = "";
+      toggleBadge.hidden = true;
+      toggleBadge.textContent = "";
     }
   }
 

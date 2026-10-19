@@ -87,7 +87,9 @@ def upload_file(room_id):
     }
     socketio.emit("new_message", payload, room=str(room_id))
 
-    from sockets import emit_room_badge_counts
+    from sockets import emit_room_badge_counts, emit_sidebar_room_refresh
+
+    emit_sidebar_room_refresh(room_id, room["type"])
 
     for member in db.get_room_member_nicknames(room_id, room["type"]):
         if member != nickname:

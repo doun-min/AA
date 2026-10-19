@@ -356,13 +356,14 @@ def list_group_rooms_for(nickname):
                    COALESCE(
                        (SELECT MAX(created_at) FROM messages WHERE room_id = rooms.id),
                        rooms.created_at
-                   ) AS last_activity_at
+                   ) AS last_activity_at,
+                   (SELECT MAX(id) FROM messages WHERE room_id = rooms.id) AS last_message_id
             FROM rooms
             WHERE type IN ('global','group')
               AND (is_private = 0 OR id IN (
                   SELECT room_id FROM room_participants WHERE nickname = ?
               ))
-            ORDER BY (type='global') DESC, last_activity_at DESC
+            ORDER BY (type='global') DESC, last_activity_at DESC, last_message_id DESC, rooms.id DESC
             """,
             (nickname,),
         )
@@ -481,15 +482,74 @@ def list_direct_rooms_for(nickname):
                    COALESCE(
                        (SELECT MAX(created_at) FROM messages WHERE room_id = r.id),
                        r.created_at
-                   ) AS last_activity_at
+                   ) AS last_activity_at,
+                   (SELECT MAX(id) FROM messages WHERE room_id = r.id) AS last_message_id
             FROM rooms r
             JOIN direct_participants dp ON dp.room_id = r.id
             WHERE dp.nickname = ? AND r.type='direct'
-            ORDER BY last_activity_at DESC
+            ORDER BY last_activity_at DESC, last_message_id DESC, r.id DESC
             """,
             (nickname, nickname),
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+def list_sidebar_rooms(nickname, current_room_id=None, limit=8):
+    """방 종류와 관계없이 최근 메시지가 있는 방을 최대 limit개 보여준다."""
+    groups = list_group_rooms_for(nickname)
+    directs = list_direct_rooms_for(nickname)
+    room_ids = [room["id"] for room in groups + directs]
+    latest = {}
+    if room_ids:
+        placeholders = ",".join("?" for _ in room_ids)
+        with db_cursor() as cur:
+            cur.execute(
+                f"SELECT m.id, m.room_id, m.sender, m.type, m.content, m.original_filename, "
+                f"m.deleted_at, m.created_at FROM messages m "
+                f"WHERE m.id IN (SELECT MAX(id) FROM messages "
+                f"WHERE room_id IN ({placeholders}) GROUP BY room_id)",
+                room_ids,
+            )
+            latest = {row["room_id"]: dict(row) for row in cur.fetchall()}
+    unread = get_unread_message_counts(nickname)
+
+    def item(room, name, kind):
+        message = latest.get(room["id"])
+        if not message:
+            preview = "아직 메시지가 없습니다."
+        elif message["deleted_at"]:
+            preview = "삭제된 메시지입니다."
+        elif message["type"] == "image":
+            preview = f"{message['sender']}: 사진 · {message['original_filename'] or '이미지'}"
+        elif message["type"] == "file":
+            preview = f"{message['sender']}: 파일 · {message['original_filename'] or '첨부파일'}"
+        elif message["type"] == "system":
+            preview = message["content"] or "시스템 메시지"
+        else:
+            preview = f"{message['sender']}: {message['content'] or ''}"
+        return {
+            "id": room["id"], "name": name, "kind": kind,
+            "preview": preview.replace("\n", " ").replace("\r", " "),
+            "unread_count": unread.get(room["id"], 0),
+            "last_activity_at": room["last_activity_at"],
+        }
+
+    all_rooms = (
+        [(room, room["name"], "group") for room in groups]
+        + [(room, room["other"] or "1:1 대화", "direct") for room in directs]
+    )
+    recent = [entry for entry in all_rooms if entry[0]["id"] in latest]
+    recent.sort(key=lambda entry: latest[entry[0]["id"]]["id"], reverse=True)
+    selected = recent[:limit]
+    if current_room_id and not any(entry[0]["id"] == current_room_id for entry in selected):
+        current = next((entry for entry in all_rooms if entry[0]["id"] == current_room_id), None)
+        if current:
+            selected = selected[:limit - 1] + [current]
+            selected.sort(key=lambda entry: latest.get(entry[0]["id"], {}).get("id", 0), reverse=True)
+    return {
+        "rooms": [item(*entry) for entry in selected],
+        "total_unread": sum(unread.values()),
+    }
 
 
 def is_direct_participant(room_id, nickname):
@@ -852,7 +912,7 @@ def get_unread_message_counts(nickname):
             SELECT m.room_id AS room_id, COUNT(*) AS c
             FROM messages m
             JOIN rooms r ON r.id = m.room_id
-            WHERE m.sender != ? AND m.type != 'system'
+            WHERE m.sender != ? AND m.type != 'system' AND m.deleted_at IS NULL
               AND m.id NOT IN (SELECT message_id FROM message_reads WHERE user_id = ?)
               AND (
                 (r.type = 'direct' AND EXISTS (

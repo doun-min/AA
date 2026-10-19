@@ -672,10 +672,42 @@
   });
 
   const olderButton = document.getElementById("load-older-messages");
+  const historyTools = document.getElementById("chat-history-tools");
+  const searchPanel = document.getElementById("chat-search-panel");
+  const searchTrigger = document.getElementById("chat-open-search");
+  const searchClose = document.getElementById("chat-search-close");
   const searchInput = document.getElementById("chat-search");
   const searchButton = document.getElementById("chat-search-button");
   const latestButton = document.getElementById("chat-latest-button");
   const searchResults = document.getElementById("chat-search-results");
+
+  function updateHistoryTools() {
+    historyTools.hidden = olderButton.hidden && latestButton.hidden;
+  }
+
+  function openSearch() {
+    searchPanel.hidden = false;
+    searchTrigger.closest("details").open = false;
+    searchInput.focus();
+    searchInput.select();
+  }
+
+  function closeSearch() {
+    searchPanel.hidden = true;
+    searchResults.hidden = true;
+    searchTrigger.focus();
+  }
+
+  searchTrigger.addEventListener("click", openSearch);
+  searchClose.addEventListener("click", closeSearch);
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      openSearch();
+    } else if (event.key === "Escape" && !searchPanel.hidden) {
+      closeSearch();
+    }
+  }, true);
 
   olderButton.addEventListener("click", async () => {
     const first = messagesEl.querySelector(".message[data-msg-id]");
@@ -689,6 +721,7 @@
       [...data.messages].reverse().forEach((msg) => appendMessage(msg, true));
       messagesEl.scrollTop += messagesEl.scrollHeight - beforeHeight;
       olderButton.hidden = !data.has_more;
+      updateHistoryTools();
     } catch (err) {
       showToast(err.message);
     } finally {
@@ -745,6 +778,7 @@
       searchResults.hidden = true;
       latestButton.hidden = false;
       olderButton.hidden = !data.messages.length;
+      updateHistoryTools();
     } catch (err) {
       showToast(err.message);
     }
